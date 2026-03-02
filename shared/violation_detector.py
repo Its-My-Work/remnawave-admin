@@ -772,7 +772,7 @@ class GeoAnalyzer:
         cities: Set[str] = set()
         impossible_travel = False
         # Configurable city distance threshold
-        min_city_distance = config_service.get("violations_geo_max_city_distance_km", min_city_distance_DEFAULT)
+        min_city_distance = config_service.get("violations_geo_max_city_distance_km", self.MIN_DISTANCE_FOR_DIFFERENT_CITIES_DEFAULT)
 
         # Собираем уникальные IP из активных подключений и истории
         all_ips = set()
