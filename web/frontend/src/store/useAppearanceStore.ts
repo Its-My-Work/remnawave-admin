@@ -4,11 +4,13 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 export type UIDensity = 'compact' | 'comfortable' | 'spacious'
 export type BorderRadius = 'sharp' | 'default' | 'rounded'
 export type FontSize = 'small' | 'default' | 'large'
-export type ThemePreset = 'cyan' | 'emerald' | 'violet' | 'rose' | 'amber' | 'blue' | 'light'
+export type ThemePreset = 'obsidian' | 'arctic' | 'sakura' | 'twilight' | 'ember'
+export type ColorMode = 'dark' | 'light'
 
 interface AppearanceState {
   // Settings
   theme: ThemePreset
+  colorMode: ColorMode
   density: UIDensity
   borderRadius: BorderRadius
   fontSize: FontSize
@@ -17,17 +19,20 @@ interface AppearanceState {
 
   // Actions
   setTheme: (theme: ThemePreset) => void
+  setColorMode: (mode: ColorMode) => void
   setDensity: (density: UIDensity) => void
   setBorderRadius: (radius: BorderRadius) => void
   setFontSize: (size: FontSize) => void
   setAnimationsEnabled: (enabled: boolean) => void
   setSidebarCollapsed: (collapsed: boolean) => void
   toggleSidebar: () => void
+  toggleColorMode: () => void
   resetToDefaults: () => void
 }
 
 const defaults = {
-  theme: 'cyan' as ThemePreset,
+  theme: 'obsidian' as ThemePreset,
+  colorMode: 'dark' as ColorMode,
   density: 'comfortable' as UIDensity,
   borderRadius: 'default' as BorderRadius,
   fontSize: 'default' as FontSize,
@@ -41,12 +46,14 @@ export const useAppearanceStore = create<AppearanceState>()(
       ...defaults,
 
       setTheme: (theme) => set({ theme }),
+      setColorMode: (colorMode) => set({ colorMode }),
       setDensity: (density) => set({ density }),
       setBorderRadius: (borderRadius) => set({ borderRadius }),
       setFontSize: (fontSize) => set({ fontSize }),
       setAnimationsEnabled: (animationsEnabled) => set({ animationsEnabled }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      toggleColorMode: () => set((s) => ({ colorMode: s.colorMode === 'dark' ? 'light' : 'dark' })),
       resetToDefaults: () => set(defaults),
     }),
     {
@@ -54,6 +61,7 @@ export const useAppearanceStore = create<AppearanceState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         theme: state.theme,
+        colorMode: state.colorMode,
         density: state.density,
         borderRadius: state.borderRadius,
         fontSize: state.fontSize,

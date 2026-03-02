@@ -1,4 +1,4 @@
-import { Paintbrush, RotateCcw, Sun } from 'lucide-react'
+import { Paintbrush, RotateCcw, Sun, Moon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   useAppearanceStore,
@@ -49,14 +49,12 @@ function OptionButton<T extends string>({ value, current, onChange, label }: Opt
 }
 
 // Theme presets with their display colors and labels
-const themePresets: { value: ThemePreset; label: string; colors: [string, string]; isLight?: boolean }[] = [
-  { value: 'cyan', label: 'Cyan', colors: ['#0d9488', '#06b6d4'] },
-  { value: 'emerald', label: 'Emerald', colors: ['#059669', '#10b981'] },
-  { value: 'violet', label: 'Violet', colors: ['#7c3aed', '#a78bfa'] },
-  { value: 'rose', label: 'Rose', colors: ['#e11d48', '#fb7185'] },
-  { value: 'amber', label: 'Amber', colors: ['#d97706', '#f59e0b'] },
-  { value: 'blue', label: 'Blue', colors: ['#2563eb', '#60a5fa'] },
-  { value: 'light', label: 'Light', colors: ['#f1f5f9', '#06b6d4'], isLight: true },
+const themePresets: { value: ThemePreset; label: string; colors: [string, string] }[] = [
+  { value: 'obsidian', label: 'Obsidian', colors: ['#6366f1', '#818cf8'] },
+  { value: 'arctic', label: 'Arctic', colors: ['#0ea5e9', '#38bdf8'] },
+  { value: 'sakura', label: 'Sakura', colors: ['#ec4899', '#f472b6'] },
+  { value: 'twilight', label: 'Twilight', colors: ['#8b5cf6', '#a78bfa'] },
+  { value: 'ember', label: 'Ember', colors: ['#f59e0b', '#fbbf24'] },
 ]
 
 const densityOptions: { value: UIDensity; label: string }[] = [
@@ -81,11 +79,13 @@ export function AppearancePanel() {
   const { t } = useTranslation()
   const {
     theme,
+    colorMode,
     density,
     borderRadius,
     fontSize,
     animationsEnabled,
     setTheme,
+    toggleColorMode,
     setDensity,
     setBorderRadius,
     setFontSize,
@@ -130,7 +130,7 @@ export function AppearancePanel() {
             {/* Theme */}
             <div className="space-y-2">
               <Label className="text-xs text-dark-200 uppercase tracking-wider">{t('appearance.theme')}</Label>
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-5 gap-1.5">
                 {themePresets.map((preset) => {
                   const isActive = preset.value === theme
                   return (
@@ -146,18 +146,12 @@ export function AppearancePanel() {
                           )}
                         >
                           {/* Color swatch */}
-                          {preset.isLight ? (
-                            <div className="w-7 h-7 rounded-full border-2 border-dark-400/30 flex items-center justify-center bg-white">
-                              <Sun className="w-3.5 h-3.5 text-amber-500" />
-                            </div>
-                          ) : (
-                            <div
-                              className="w-7 h-7 rounded-full border-2 border-dark-400/30"
-                              style={{
-                                background: `linear-gradient(135deg, ${preset.colors[0]} 0%, ${preset.colors[1]} 100%)`,
-                              }}
-                            />
-                          )}
+                          <div
+                            className="w-7 h-7 rounded-full border-2 border-dark-400/30"
+                            style={{
+                              background: `linear-gradient(135deg, ${preset.colors[0]} 0%, ${preset.colors[1]} 100%)`,
+                            }}
+                          />
                           <span className={cn(
                             "truncate w-full text-center",
                             isActive ? "text-primary-400" : "text-dark-200"
@@ -171,6 +165,32 @@ export function AppearancePanel() {
                   )
                 })}
               </div>
+            </div>
+
+            <Separator className="bg-dark-400/20" />
+
+            {/* Color Mode */}
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-dark-200 uppercase tracking-wider">{t('appearance.colorMode')}</Label>
+              <button
+                onClick={toggleColorMode}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150",
+                  "bg-dark-800 border border-dark-400/20 hover:border-dark-400/40"
+                )}
+              >
+                {colorMode === 'dark' ? (
+                  <>
+                    <Moon className="w-3.5 h-3.5 text-primary-400" />
+                    <span className="text-dark-100">Dark</span>
+                  </>
+                ) : (
+                  <>
+                    <Sun className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-dark-100">Light</span>
+                  </>
+                )}
+              </button>
             </div>
 
             <Separator className="bg-dark-400/20" />

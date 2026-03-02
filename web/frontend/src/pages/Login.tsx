@@ -339,43 +339,13 @@ export default function Login() {
 
   return (
     <div className="login-bg min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Decorative background orbs */}
-      <div
-        className="login-orb"
-        style={{
-          width: 400,
-          height: 400,
-          background: 'radial-gradient(circle, #0d9488 0%, transparent 70%)',
-          top: '-10%',
-          right: '-5%',
-          animationDelay: '0s',
-        }}
-      />
-      <div
-        className="login-orb"
-        style={{
-          width: 350,
-          height: 350,
-          background: 'radial-gradient(circle, #06b6d4 0%, transparent 70%)',
-          bottom: '-8%',
-          left: '-5%',
-          animationDelay: '-3s',
-          animationDuration: '10s',
-        }}
-      />
-      <div
-        className="login-orb"
-        style={{
-          width: 200,
-          height: 200,
-          background: 'radial-gradient(circle, #0891b2 0%, transparent 70%)',
-          top: '40%',
-          left: '15%',
-          animationDelay: '-5s',
-          animationDuration: '12s',
-          opacity: 0.08,
-        }}
-      />
+      {/* Mesh gradient background */}
+      <div className="mesh-bg">
+        <div className="mesh-layer mesh-layer--1" />
+        <div className="mesh-layer mesh-layer--2" />
+        <div className="mesh-layer mesh-layer--3" />
+        <div className="mesh-layer mesh-layer--4" />
+      </div>
 
       {/* Main card */}
       <div
@@ -385,15 +355,12 @@ export default function Login() {
         )}
       >
         <Card
-          className="rounded-2xl border-dark-400/15 overflow-hidden"
+          className="rounded-2xl overflow-hidden glass-heavy"
           style={{
-            background:
-              'linear-gradient(160deg, rgba(22, 27, 34, 0.92) 0%, rgba(13, 17, 23, 0.96) 100%)',
             boxShadow:
-              '0 0 0 1px rgba(255, 255, 255, 0.04), ' +
+              '0 0 0 1px var(--glass-highlight), ' +
               '0 20px 60px -10px rgba(0, 0, 0, 0.5), ' +
-              '0 0 80px -20px rgba(13, 148, 136, 0.12)',
-            backdropFilter: 'blur(20px)',
+              '0 0 80px -20px rgba(var(--glow-rgb), 0.12)',
           }}
         >
           {/* Top accent line */}
@@ -401,7 +368,7 @@ export default function Login() {
             className="h-[2px] w-full"
             style={{
               background:
-                'linear-gradient(90deg, transparent 0%, #0d9488 30%, #06b6d4 70%, transparent 100%)',
+                'linear-gradient(90deg, transparent 0%, var(--accent-from) 30%, var(--accent-to) 70%, transparent 100%)',
             }}
           />
 
@@ -410,8 +377,8 @@ export default function Login() {
               <div
                 className="w-16 h-16 rounded-2xl flex items-center justify-center relative"
                 style={{
-                  background: 'linear-gradient(135deg, #0d9488 0%, #06b6d4 100%)',
-                  boxShadow: '0 0 40px -5px rgba(13, 148, 136, 0.35)',
+                  background: 'linear-gradient(135deg, var(--accent-from) 0%, var(--accent-to) 100%)',
+                  boxShadow: '0 0 40px -5px rgba(var(--glow-rgb), 0.35)',
                 }}
               >
                 {needsSetup ? (

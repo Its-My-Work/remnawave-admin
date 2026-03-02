@@ -9,7 +9,11 @@ describe('useAppearanceStore', () => {
 
   describe('default values', () => {
     it('has correct default theme', () => {
-      expect(useAppearanceStore.getState().theme).toBe('cyan')
+      expect(useAppearanceStore.getState().theme).toBe('obsidian')
+    })
+
+    it('has correct default color mode', () => {
+      expect(useAppearanceStore.getState().colorMode).toBe('dark')
     })
 
     it('has correct default density', () => {
@@ -35,16 +39,33 @@ describe('useAppearanceStore', () => {
 
   describe('setTheme', () => {
     it('updates theme', () => {
-      useAppearanceStore.getState().setTheme('violet')
-      expect(useAppearanceStore.getState().theme).toBe('violet')
+      useAppearanceStore.getState().setTheme('twilight')
+      expect(useAppearanceStore.getState().theme).toBe('twilight')
     })
 
     it('can set all theme presets', () => {
-      const presets = ['cyan', 'emerald', 'violet', 'rose', 'amber', 'blue', 'light'] as const
+      const presets = ['obsidian', 'arctic', 'sakura', 'twilight', 'ember'] as const
       presets.forEach((preset) => {
         useAppearanceStore.getState().setTheme(preset)
         expect(useAppearanceStore.getState().theme).toBe(preset)
       })
+    })
+  })
+
+  describe('colorMode', () => {
+    it('setColorMode updates color mode', () => {
+      useAppearanceStore.getState().setColorMode('light')
+      expect(useAppearanceStore.getState().colorMode).toBe('light')
+    })
+
+    it('toggleColorMode toggles between dark and light', () => {
+      expect(useAppearanceStore.getState().colorMode).toBe('dark')
+
+      useAppearanceStore.getState().toggleColorMode()
+      expect(useAppearanceStore.getState().colorMode).toBe('light')
+
+      useAppearanceStore.getState().toggleColorMode()
+      expect(useAppearanceStore.getState().colorMode).toBe('dark')
     })
   })
 
@@ -101,7 +122,8 @@ describe('useAppearanceStore', () => {
 
   describe('resetToDefaults', () => {
     it('resets all settings to defaults', () => {
-      useAppearanceStore.getState().setTheme('rose')
+      useAppearanceStore.getState().setTheme('sakura')
+      useAppearanceStore.getState().setColorMode('light')
       useAppearanceStore.getState().setDensity('spacious')
       useAppearanceStore.getState().setBorderRadius('rounded')
       useAppearanceStore.getState().setFontSize('large')
@@ -111,7 +133,8 @@ describe('useAppearanceStore', () => {
       useAppearanceStore.getState().resetToDefaults()
 
       const state = useAppearanceStore.getState()
-      expect(state.theme).toBe('cyan')
+      expect(state.theme).toBe('obsidian')
+      expect(state.colorMode).toBe('dark')
       expect(state.density).toBe('comfortable')
       expect(state.borderRadius).toBe('default')
       expect(state.fontSize).toBe('default')

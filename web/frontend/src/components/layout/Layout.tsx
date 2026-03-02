@@ -34,10 +34,13 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-dark-800 relative">
-      {/* Aurora background effect */}
-      <div className="aurora-bg">
-        <div className="aurora-blob" />
-        <div className="aurora-blob" />
+      {/* Mesh gradient background */}
+      <div className="mesh-bg">
+        <div className="mesh-layer mesh-layer--1" />
+        <div className="mesh-layer mesh-layer--2" />
+        <div className="mesh-layer mesh-layer--3" />
+        <div className="mesh-layer mesh-layer--4" />
+        <div className="mesh-layer mesh-layer--5" />
       </div>
 
       {/* Sidebar */}

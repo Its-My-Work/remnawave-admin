@@ -210,7 +210,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className={cn(
-        "sidebar-logo-area flex items-center justify-between h-16 px-6 border-b border-sidebar-border",
+        "sidebar-logo-area flex items-center justify-between h-16 px-6 border-b border-[var(--glass-border)]",
         collapsed && "px-0 justify-center"
       )}>
         <Link to="/" onClick={handleNavClick} className={cn(
@@ -243,7 +243,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
             if (isNavSection(entry)) {
               if (collapsed) {
                 // Thin separator in collapsed mode
-                return <div key={entry.name} className="my-2 mx-1 border-t border-sidebar-border" />
+                return <div key={entry.name} className="my-2 mx-1 border-t border-[var(--glass-border)]" />
               }
               return (
                 <div
@@ -404,7 +404,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       </ScrollArea>
 
       {/* Collapse toggle — desktop only */}
-      <div className="hidden md:flex justify-center py-2 border-t border-sidebar-border">
+      <div className="hidden md:flex justify-center py-2 border-t border-[var(--glass-border)]">
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>
             <Button
@@ -423,7 +423,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       </div>
 
       {/* Project links */}
-      <Separator className="bg-sidebar-border" />
+      <Separator className="bg-[var(--glass-border)]" />
       <div className={cn("px-4 py-2 space-y-0.5", collapsed && "px-2")}>
         {collapsed ? (
           <>
@@ -501,7 +501,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       </div>
 
       {/* User info */}
-      <Separator className="bg-sidebar-border" />
+      <Separator className="bg-[var(--glass-border)]" />
       <div className={cn("p-4", collapsed && "p-2")}>
         <div className={cn("sidebar-user-section flex items-center", collapsed && "justify-center")}>
           <Tooltip delayDuration={0}>
@@ -577,7 +577,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       <div
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex flex-col",
-          "bg-sidebar border-r border-sidebar-border animate-fade-in",
+          "bg-[var(--glass-bg)] backdrop-blur-[var(--glass-blur-heavy)] border-r border-[var(--glass-border)] animate-fade-in",
           "transform transition-all duration-300 ease-in-out",
           "md:relative md:translate-x-0",
           collapsed ? "w-[4.5rem]" : "w-64",

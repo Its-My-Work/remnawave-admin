@@ -82,7 +82,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
 
   return (
     <header
-      className="h-16 border-b border-dark-400/10 flex items-center justify-between px-4 md:px-6 animate-fade-in bg-dark-700/95 backdrop-blur-xl relative z-30"
+      className="h-16 border-b border-[var(--glass-border)] flex items-center justify-between px-4 md:px-6 animate-fade-in bg-[var(--glass-bg)] backdrop-blur-[var(--glass-blur-heavy)] relative z-30"
     >
       {/* Left side: hamburger + search */}
       <div className="flex items-center gap-3 flex-1">
@@ -99,7 +99,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
         {/* Search trigger — opens Command Palette */}
         <button
           onClick={onSearchClick}
-          className="header-search-bar flex-1 max-w-md hidden sm:flex items-center gap-2 h-10 rounded-md border border-dark-400/20 bg-dark-800 px-3 text-sm text-dark-300 hover:border-dark-400/40 hover:text-dark-200 transition-colors cursor-pointer"
+          className="header-search-bar flex-1 max-w-md hidden sm:flex items-center gap-2 h-10 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] backdrop-blur-sm px-3 text-sm text-dark-300 hover:border-[var(--glass-border-hover)] hover:text-dark-200 transition-colors cursor-pointer"
         >
           <Search className="w-4 h-4 flex-shrink-0" />
           <span className="flex-1 text-left">{t('header.searchPlaceholder')}</span>
@@ -153,9 +153,9 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
 
           {/* Dropdown */}
           {dropdownOpen && (
-            <div className="absolute right-0 top-full mt-2 w-96 max-w-[calc(100vw-2rem)] bg-dark-700 border border-dark-400/20 rounded-xl shadow-2xl z-50 animate-fade-in overflow-hidden">
+            <div className="absolute right-0 top-full mt-2 w-96 max-w-[calc(100vw-2rem)] bg-[var(--glass-bg)] backdrop-blur-[var(--glass-blur-heavy)] border border-[var(--glass-border)] rounded-xl shadow-2xl z-50 animate-fade-in overflow-hidden">
               {/* Header */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-dark-400/20">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--glass-border)]">
                 <h3 className="text-sm font-semibold text-white">{t('notifications.title')}</h3>
                 <div className="flex items-center gap-2">
                   {unreadCount > 0 && (
@@ -213,7 +213,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
               </ScrollArea>
 
               {/* Footer */}
-              <div className="px-4 py-2.5 border-t border-dark-400/20">
+              <div className="px-4 py-2.5 border-t border-[var(--glass-border)]">
                 <button
                   onClick={() => {
                     navigate('/notifications')

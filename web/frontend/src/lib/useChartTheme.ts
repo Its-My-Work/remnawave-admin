@@ -6,8 +6,8 @@ import { useAppearanceStore } from '../store/useAppearanceStore'
  * Uses CSS custom properties defined in index.css so colors stay in sync.
  */
 export function useChartTheme() {
-  const theme = useAppearanceStore((s) => s.theme)
-  const isLight = theme === 'light'
+  const colorMode = useAppearanceStore((s) => s.colorMode)
+  const isLight = colorMode === 'light'
 
   return useMemo(
     () => ({
