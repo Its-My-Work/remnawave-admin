@@ -519,7 +519,7 @@ function TopUsersCard({
   const items = topUsers?.items || []
 
   return (
-    <Card className="animate-fade-in-up cursor-pointer hover:shadow-[0_0_24px_-6px_rgba(var(--glow-rgb),0.2)] transition-all" style={{ animationDelay: '0.15s' }} onClick={() => navigate('/users')}>
+    <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -537,11 +537,15 @@ function TopUsersCard({
         ) : items.length > 0 ? (
           <div className="space-y-2">
             {items.map((user, i) => (
-              <div key={user.uuid} className="flex items-center gap-3 bg-[var(--glass-bg)] rounded-lg px-3 py-2 border border-[var(--glass-border)]">
+              <div
+                key={user.uuid}
+                className="flex items-center gap-3 bg-[var(--glass-bg)] rounded-lg px-3 py-2 border border-[var(--glass-border)] cursor-pointer hover:bg-[var(--glass-bg-hover)] transition-colors"
+                onClick={() => navigate(`/users/${user.uuid}`)}
+              >
                 <span className="text-xs text-muted-foreground w-4 text-center font-mono">{i + 1}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm text-white truncate">{user.username}</span>
+                    <span className="text-sm text-white truncate hover:text-primary-400 transition-colors">{user.username}</span>
                     <span className="text-xs text-primary-400 font-mono font-semibold shrink-0 ml-2">{formatBytesLocal(user.used_traffic_bytes)}</span>
                   </div>
                   {user.traffic_limit_bytes && user.usage_percent != null ? (
@@ -1223,9 +1227,8 @@ const ExpiryCountsCard = memo(function ExpiryCountsCard({
 
   return (
     <Card
-      className="animate-fade-in-up cursor-pointer hover:shadow-[0_0_24px_-6px_rgba(var(--glow-rgb),0.2)] transition-all"
+      className="animate-fade-in-up"
       style={{ animationDelay: '0.25s' }}
-      onClick={() => navigate('/users')}
     >
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
@@ -1244,7 +1247,10 @@ const ExpiryCountsCard = memo(function ExpiryCountsCard({
           </div>
         ) : counts ? (
           <div className="space-y-2">
-            <div className="flex items-center justify-between bg-[var(--glass-bg)] rounded-lg px-3 py-2 border border-[var(--glass-border)]">
+            <div
+              className="flex items-center justify-between bg-[var(--glass-bg)] rounded-lg px-3 py-2 border border-[var(--glass-border)] cursor-pointer hover:bg-[var(--glass-bg-hover)] transition-colors"
+              onClick={() => navigate('/users?expire_filter=expiring_7d')}
+            >
               <span className="text-xs text-muted-foreground">{t('dashboard.expiringIn7d')}</span>
               <Badge
                 variant="secondary"
@@ -1257,7 +1263,10 @@ const ExpiryCountsCard = memo(function ExpiryCountsCard({
                 {counts.in7d}
               </Badge>
             </div>
-            <div className="flex items-center justify-between bg-[var(--glass-bg)] rounded-lg px-3 py-2 border border-[var(--glass-border)]">
+            <div
+              className="flex items-center justify-between bg-[var(--glass-bg)] rounded-lg px-3 py-2 border border-[var(--glass-border)] cursor-pointer hover:bg-[var(--glass-bg-hover)] transition-colors"
+              onClick={() => navigate('/users?expire_filter=expiring_30d')}
+            >
               <span className="text-xs text-muted-foreground">{t('dashboard.expiringIn30d')}</span>
               <Badge variant="secondary" className="font-mono text-xs">{counts.in30d}</Badge>
             </div>

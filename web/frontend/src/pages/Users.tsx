@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, memo, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
@@ -723,12 +723,13 @@ export default function Users() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [status, setStatus] = useState('')
   const [trafficType, setTrafficType] = useState('')
-  const [expireFilter, setExpireFilter] = useState('')
+  const [searchParams] = useSearchParams()
+  const [expireFilter, setExpireFilter] = useState(searchParams.get('expire_filter') || '')
   const [onlineFilter, setOnlineFilter] = useState('')
   const [trafficUsage, setTrafficUsage] = useState('')
   const [sortBy, setSortBy] = useState('created_at')
   const [sortOrder, setSortOrder] = useState('desc')
-  const [showFilters, setShowFilters] = useState(false)
+  const [showFilters, setShowFilters] = useState(!!searchParams.get('expire_filter'))
 
   const activeFilterCount = useMemo(
     () => [status, trafficType, expireFilter, onlineFilter, trafficUsage].filter(Boolean).length,
