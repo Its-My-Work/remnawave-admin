@@ -1595,7 +1595,10 @@
       "geography": "Geography",
       "topUsers": "Top Users",
       "trends": "Trends",
-      "sharedHwids": "Shared HWIDs"
+      "sharedHwids": "Shared HWIDs",
+      "providers": "Providers",
+      "nodes": "Nodes",
+      "retention": "Retention"
     },
     "periods": {
       "day": "Day",
@@ -1689,6 +1692,43 @@
         "has_active": "With active",
         "has_expired": "With expired"
       }
+    },
+    "providers": {
+      "title": "Providers & ASN",
+      "tooltip": "Connection types, ASN distribution, and security flags",
+      "connectionTypes": "Connection Types",
+      "topAsn": "Top ASN"
+    },
+    "nodes": {
+      "title": "Nodes",
+      "tooltip": "Node fleet health and performance",
+      "total": "Total",
+      "online": "Online",
+      "offline": "Offline",
+      "disabled": "Disabled",
+      "avgCpu": "Avg CPU",
+      "avgRam": "Avg RAM",
+      "noData": "No nodes found",
+      "name": "Node",
+      "disk": "Disk",
+      "users": "Users",
+      "traffic": "Traffic",
+      "speed": "Speed"
+    },
+    "retention": {
+      "title": "Retention Analysis",
+      "tooltip": "Weekly cohort retention: how many users registered each week remain active",
+      "weeks": "weeks",
+      "overallRetention": "Overall Retention",
+      "totalRegistered": "Registered",
+      "totalRetained": "Retained",
+      "noData": "No cohort data available",
+      "week": "Week",
+      "total": "Total",
+      "active": "Active",
+      "retentionPct": "Retention",
+      "trafficPct": "With Traffic",
+      "subPct": "Active Sub"
     }
   },
   "automations": {

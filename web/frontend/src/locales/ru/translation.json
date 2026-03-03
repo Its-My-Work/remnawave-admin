@@ -1595,7 +1595,10 @@
       "geography": "География",
       "topUsers": "Топ юзеры",
       "trends": "Тренды",
-      "sharedHwids": "Общие HWID"
+      "sharedHwids": "Общие HWID",
+      "providers": "Провайдеры",
+      "nodes": "Ноды",
+      "retention": "Ретенция"
     },
     "periods": {
       "day": "День",
@@ -1689,6 +1692,43 @@
         "has_active": "С активными",
         "has_expired": "С истёкшими"
       }
+    },
+    "providers": {
+      "title": "Провайдеры и ASN",
+      "tooltip": "Типы подключений, распределение ASN и флаги безопасности",
+      "connectionTypes": "Типы подключений",
+      "topAsn": "Топ ASN"
+    },
+    "nodes": {
+      "title": "Ноды",
+      "tooltip": "Состояние и производительность нод",
+      "total": "Всего",
+      "online": "Онлайн",
+      "offline": "Офлайн",
+      "disabled": "Отключена",
+      "avgCpu": "Сред. CPU",
+      "avgRam": "Сред. RAM",
+      "noData": "Ноды не найдены",
+      "name": "Нода",
+      "disk": "Диск",
+      "users": "Юзеры",
+      "traffic": "Трафик",
+      "speed": "Скорость"
+    },
+    "retention": {
+      "title": "Анализ ретенции",
+      "tooltip": "Недельная когортная ретенция: сколько пользователей, зарегистрированных каждую неделю, остаются активными",
+      "weeks": "недель",
+      "overallRetention": "Общая ретенция",
+      "totalRegistered": "Зарегистрировано",
+      "totalRetained": "Удержано",
+      "noData": "Нет данных по когортам",
+      "week": "Неделя",
+      "total": "Всего",
+      "active": "Активны",
+      "retentionPct": "Ретенция",
+      "trafficPct": "С трафиком",
+      "subPct": "Актив. подп."
     }
   },
   "automations": {
