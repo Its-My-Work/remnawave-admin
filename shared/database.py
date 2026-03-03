@@ -1443,11 +1443,11 @@ class DatabaseService:
         async with self.acquire() as conn:
             async with conn.transaction():
                 # 1. Bulk upsert via UNNEST + ON CONFLICT on partial unique index
-                # ip_address is VARCHAR(45) — no ::inet cast
+                # ip_address column is INET — cast text to inet explicitly
                 upsert_result = await conn.execute(
                     """
                     INSERT INTO user_connections (user_uuid, ip_address, node_uuid, device_info, connected_at)
-                    SELECT u::uuid, u_ip, n::uuid, d::jsonb, COALESCE(t, NOW())
+                    SELECT u::uuid, u_ip::inet, n::uuid, d::jsonb, COALESCE(t, NOW())
                     FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[], $5::timestamptz[])
                         AS t(u, u_ip, n, d, t)
                     ON CONFLICT (user_uuid, ip_address) WHERE disconnected_at IS NULL
@@ -1466,7 +1466,7 @@ class DatabaseService:
                     UPDATE user_connections uc
                     SET disconnected_at = NOW()
                     FROM (
-                        SELECT DISTINCT u::uuid AS uid, i AS ip
+                        SELECT DISTINCT u::uuid AS uid, i::inet AS ip
                         FROM UNNEST($1::text[], $2::text[]) AS t(u, i)
                     ) batch
                     WHERE uc.user_uuid = batch.uid
