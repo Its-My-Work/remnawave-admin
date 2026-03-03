@@ -826,6 +826,10 @@ class SyncService:
                     # API returns username, not uuid — build a mapping
                     usernames = [u.get("username", "") for u in top_users if u.get("username")]
                     username_map = await db_service.get_username_to_uuid_map(usernames) if usernames else {}
+                    logger.debug(
+                        "Node %s: %d topUsers, %d usernames mapped",
+                        node.get("name", node_uuid), len(top_users), len(username_map),
+                    )
 
                     for u in top_users:
                         username = u.get("username", "")
@@ -847,7 +851,7 @@ class SyncService:
                 status="success",
                 records_synced=total_synced,
             )
-            logger.debug("Synced node traffic: %d records across %d nodes", total_synced, len(active_nodes))
+            logger.info("Synced node traffic: %d records across %d nodes", total_synced, len(active_nodes))
             return total_synced
 
         except Exception as e:
