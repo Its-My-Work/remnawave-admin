@@ -805,7 +805,8 @@ class SyncService:
             nodes = await db_service.get_all_nodes()
             active_nodes = [
                 n for n in nodes
-                if n.get("is_connected") and not n.get("is_disabled")
+                if (n.get("isConnected") or n.get("is_connected"))
+                and not (n.get("isDisabled") or n.get("is_disabled"))
             ]
 
             now = datetime.now(timezone.utc)
