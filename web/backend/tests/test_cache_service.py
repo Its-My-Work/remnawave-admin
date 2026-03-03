@@ -21,13 +21,13 @@ from web.backend.core.cache import (
 
 class TestCacheTTLConstants:
     def test_short(self):
-        assert CACHE_TTL_SHORT == 30
+        assert CACHE_TTL_SHORT == 60
 
     def test_medium(self):
-        assert CACHE_TTL_MEDIUM == 60
+        assert CACHE_TTL_MEDIUM == 120
 
     def test_long(self):
-        assert CACHE_TTL_LONG == 300
+        assert CACHE_TTL_LONG == 600
 
 
 # ── _InMemoryCache ───────────────────────────────────────────
