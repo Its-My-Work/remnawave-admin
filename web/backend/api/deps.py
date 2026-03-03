@@ -220,6 +220,30 @@ async def get_current_admin(
     return await _validate_token_payload(payload)
 
 
+async def get_2fa_temp_admin(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> AdminUser:
+    """Dependency for endpoints that accept a 2FA temp token."""
+    token = credentials.credentials
+
+    if token_blacklist.is_blacklisted(token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    payload = decode_token(token)
+    if not payload or payload.get("type") != "2fa_temp":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired 2FA token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return await _validate_token_payload(payload)
+
+
 async def get_current_admin_ws(
     websocket: WebSocket,
     token: Optional[str] = Query(None),
@@ -355,10 +379,15 @@ def require_quota(resource: str):
 # ── Utility helpers ─────────────────────────────────────────────
 
 def get_client_ip(request: Request) -> str:
-    """Extract client IP, respecting X-Forwarded-For behind a reverse proxy."""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    """Extract client IP from trusted proxy headers.
+
+    Priority: X-Real-IP (set by nginx, not client-controllable)
+    > request.client.host (direct connection).
+    X-Forwarded-For is NOT used because clients can spoof it.
+    """
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
     return request.client.host if request.client else "unknown"
 
 

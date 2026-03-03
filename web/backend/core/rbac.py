@@ -211,6 +211,7 @@ async def update_admin_account(
         "username", "password_hash", "telegram_id", "role_id",
         "max_users", "max_traffic_gb", "max_nodes", "max_hosts",
         "is_active", "is_generated_password",
+        "totp_secret", "totp_enabled", "backup_codes",
     }
     filtered = {k: v for k, v in fields.items() if k in allowed}
     if not filtered:

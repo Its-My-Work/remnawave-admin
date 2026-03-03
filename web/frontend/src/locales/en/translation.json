@@ -219,7 +219,21 @@
     "generatePassword": "Generate password",
     "generator": "Generate",
     "copyPassword": "Copy password",
-    "minChars": "At least {{count}} characters"
+    "minChars": "At least {{count}} characters",
+    "totp": {
+      "setup": "2FA Setup",
+      "verify": "Two-Factor Authentication",
+      "setupHint": "Scan the QR code with Google Authenticator or any TOTP-compatible app.",
+      "verifyHint": "Enter the 6-digit code from your authenticator app or a backup code.",
+      "secretKey": "Secret key (for manual entry)",
+      "backupCodes": "Backup codes",
+      "backupSaved": "I have saved the backup codes",
+      "enterCode": "Verification code",
+      "confirmSetup": "Confirm & enable 2FA",
+      "verifyButton": "Verify",
+      "orBackupCode": "Or enter a backup code",
+      "cancel": "Cancel"
+    }
   },
   "dashboard": {
     "title": "Dashboard",

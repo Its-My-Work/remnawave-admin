@@ -198,6 +198,25 @@ def create_access_token(
     return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
 
+def create_temp_2fa_token(subject: str, auth_method: str = "password") -> str:
+    """Create a short-lived JWT used only for the 2FA verification step.
+
+    Valid for 5 minutes; type='2fa_temp'.
+    """
+    settings = get_web_settings()
+    expire = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+    payload = {
+        "sub": subject,
+        "exp": int(expire.timestamp()),
+        "iat": int(datetime.now(timezone.utc).timestamp()),
+        "type": "2fa_temp",
+        "auth_method": auth_method,
+    }
+
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+
+
 def create_refresh_token(subject: str) -> str:
     """
     Create JWT refresh token.

@@ -205,8 +205,22 @@ export default function Login() {
   const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
-  const { login, loginWithPassword, register, isAuthenticated, isLoading, error, clearError } =
-    useAuthStore()
+  const {
+    login,
+    loginWithPassword,
+    register,
+    totpSetup,
+    totpConfirmSetup,
+    totpVerify,
+    cancel2fa,
+    isAuthenticated,
+    isLoading,
+    error,
+    clearError,
+    requires2fa,
+    totpEnabled,
+    totpSetupData,
+  } = useAuthStore()
 
   const copyTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
@@ -218,6 +232,12 @@ export default function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPasswordForm, setShowPasswordForm] = useState(false)
+
+  // TOTP state
+  const [totpCode, setTotpCode] = useState('')
+  const [copiedSecret, setCopiedSecret] = useState(false)
+  const [copiedBackupCodes, setCopiedBackupCodes] = useState(false)
+  const [backupCodesSaved, setBackupCodesSaved] = useState(false)
 
   // Registration form state
   const [regUsername, setRegUsername] = useState('admin')
@@ -248,6 +268,13 @@ export default function Login() {
     })
   }, [isAuthenticated, navigate])
 
+  // Auto-trigger TOTP setup when 2FA is required but not yet configured
+  useEffect(() => {
+    if (requires2fa && !totpEnabled && !totpSetupData && !isLoading) {
+      totpSetup().catch(() => {})
+    }
+  }, [requires2fa, totpEnabled, totpSetupData, isLoading, totpSetup])
+
   // Setup Telegram widget
   useEffect(() => {
     if (isAuthenticated || needsSetup) return
@@ -256,7 +283,9 @@ export default function Login() {
       dataOnauth: async (user: TelegramUser) => {
         try {
           await login(user)
-          navigate('/')
+          if (!useAuthStore.getState().requires2fa) {
+            navigate('/')
+          }
         } catch (err) {
           console.error('Login failed:', err)
         }
@@ -294,9 +323,28 @@ export default function Login() {
 
     try {
       await loginWithPassword({ username: username.trim(), password })
-      navigate('/')
+      // If requires2fa was set, stay on Login page (2FA view will show)
+      if (!useAuthStore.getState().requires2fa) {
+        navigate('/')
+      }
     } catch (err) {
       console.error('Password login failed:', err)
+    }
+  }
+
+  const handleTotpVerify = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!totpCode.trim()) return
+    try {
+      if (totpEnabled) {
+        await totpVerify(totpCode.trim())
+      } else {
+        await totpConfirmSetup(totpCode.trim())
+      }
+      navigate('/')
+    } catch (err) {
+      setTotpCode('')
+      console.error('TOTP verification failed:', err)
     }
   }
 
@@ -403,11 +451,13 @@ export default function Login() {
             <div className="flex items-center gap-3 mb-6">
               <div className="flex-1 h-px bg-[var(--glass-border)]" />
               <span className="text-xs text-dark-300 font-medium uppercase tracking-wider">
-                {needsSetup
-                  ? t('login.createAdmin')
-                  : showPasswordForm
-                    ? t('login.passwordLogin')
-                    : t('login.authorization')}
+                {requires2fa
+                  ? (totpEnabled ? t('login.totp.verify') : t('login.totp.setup'))
+                  : needsSetup
+                    ? t('login.createAdmin')
+                    : showPasswordForm
+                      ? t('login.passwordLogin')
+                      : t('login.authorization')}
               </span>
               <div className="flex-1 h-px bg-[var(--glass-border)]" />
             </div>
@@ -457,8 +507,209 @@ export default function Login() {
 
             {!isLoading && (
               <>
-                {/* Registration form (first-time setup) */}
-                {needsSetup ? (
+                {/* TOTP 2FA flow */}
+                {requires2fa ? (
+                  <>
+                    {/* TOTP Setup (first-time) */}
+                    {!totpEnabled && totpSetupData && (
+                      <div className="space-y-4 mb-5 animate-fade-in">
+                        <div
+                          className="p-3 rounded-lg border border-teal-500/20"
+                          style={{
+                            background:
+                              'linear-gradient(135deg, rgba(13, 148, 136, 0.06) 0%, rgba(6, 182, 212, 0.04) 100%)',
+                          }}
+                        >
+                          <p className="text-xs text-teal-300/80 leading-relaxed">
+                            {t('login.totp.setupHint')}
+                          </p>
+                        </div>
+
+                        {/* QR Code */}
+                        <div className="flex justify-center">
+                          <div className="p-3 bg-white rounded-xl">
+                            <img
+                              src={`data:image/png;base64,${totpSetupData.qr_code}`}
+                              alt="TOTP QR Code"
+                              className="w-48 h-48"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Secret key */}
+                        <div className="space-y-1">
+                          <Label className="text-dark-200 text-xs">{t('login.totp.secretKey')}</Label>
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--glass-bg)]/40 border border-[var(--glass-border)]">
+                            <code className="text-xs text-teal-300 font-mono flex-1 select-all break-all">
+                              {totpSetupData.secret}
+                            </code>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(totpSetupData.secret)
+                                setCopiedSecret(true)
+                                setTimeout(() => setCopiedSecret(false), 2000)
+                              }}
+                              className="text-dark-300 hover:text-teal-400 transition-colors shrink-0"
+                            >
+                              {copiedSecret ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Backup codes */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-dark-200 text-xs">{t('login.totp.backupCodes')}</Label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(totpSetupData.backup_codes.join('\n'))
+                                setCopiedBackupCodes(true)
+                                setTimeout(() => setCopiedBackupCodes(false), 2000)
+                              }}
+                              className="text-dark-300 hover:text-teal-400 transition-colors"
+                            >
+                              {copiedBackupCodes ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5 p-2.5 rounded-lg bg-[var(--glass-bg)]/40 border border-[var(--glass-border)]">
+                            {totpSetupData.backup_codes.map((code, i) => (
+                              <code key={i} className="text-xs text-dark-100 font-mono text-center py-0.5">
+                                {code}
+                              </code>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-2 mt-2">
+                            <input
+                              type="checkbox"
+                              id="backup-saved"
+                              checked={backupCodesSaved}
+                              onChange={(e) => setBackupCodesSaved(e.target.checked)}
+                              className="w-3.5 h-3.5 rounded border-dark-400 text-teal-500 focus:ring-teal-500/30"
+                            />
+                            <Label htmlFor="backup-saved" className="text-dark-200 text-xs cursor-pointer">
+                              {t('login.totp.backupSaved')}
+                            </Label>
+                          </div>
+                        </div>
+
+                        {/* Confirm code */}
+                        <form onSubmit={handleTotpVerify} className="space-y-3">
+                          <div className="space-y-1">
+                            <Label htmlFor="totp-code" className="text-dark-100 text-sm font-medium">
+                              {t('login.totp.enterCode')}
+                            </Label>
+                            <div className="relative">
+                              <Shield className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-dark-300" />
+                              <Input
+                                id="totp-code"
+                                type="text"
+                                inputMode="numeric"
+                                autoComplete="one-time-code"
+                                maxLength={8}
+                                value={totpCode}
+                                onChange={(e) => setTotpCode(e.target.value.replace(/\s/g, ''))}
+                                placeholder="000000"
+                                autoFocus
+                                className="pl-10 text-center font-mono tracking-widest text-lg"
+                              />
+                            </div>
+                          </div>
+                          <Button
+                            type="submit"
+                            className={cn(
+                              'w-full h-11 font-medium text-sm',
+                              'bg-gradient-to-r from-teal-600 to-cyan-600',
+                              'hover:from-teal-500 hover:to-cyan-500',
+                              'shadow-lg shadow-teal-900/20',
+                              'transition-all duration-200'
+                            )}
+                            disabled={totpCode.length < 6 || !backupCodesSaved}
+                          >
+                            <Shield className="w-4 h-4 mr-2" />
+                            {t('login.totp.confirmSetup')}
+                          </Button>
+                        </form>
+
+                        <div className="text-center">
+                          <button
+                            onClick={cancel2fa}
+                            className="text-xs text-dark-300 hover:text-red-400 transition-colors"
+                          >
+                            {t('login.totp.cancel')}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* TOTP Verify (returning user) */}
+                    {totpEnabled && (
+                      <div className="space-y-4 mb-5 animate-fade-in">
+                        <div
+                          className="p-3 rounded-lg border border-teal-500/20"
+                          style={{
+                            background:
+                              'linear-gradient(135deg, rgba(13, 148, 136, 0.06) 0%, rgba(6, 182, 212, 0.04) 100%)',
+                          }}
+                        >
+                          <p className="text-xs text-teal-300/80 leading-relaxed">
+                            {t('login.totp.verifyHint')}
+                          </p>
+                        </div>
+
+                        <form onSubmit={handleTotpVerify} className="space-y-3">
+                          <div className="space-y-1">
+                            <Label htmlFor="totp-verify-code" className="text-dark-100 text-sm font-medium">
+                              {t('login.totp.enterCode')}
+                            </Label>
+                            <div className="relative">
+                              <Shield className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-dark-300" />
+                              <Input
+                                id="totp-verify-code"
+                                type="text"
+                                inputMode="numeric"
+                                autoComplete="one-time-code"
+                                maxLength={8}
+                                value={totpCode}
+                                onChange={(e) => setTotpCode(e.target.value.replace(/\s/g, ''))}
+                                placeholder="000000"
+                                autoFocus
+                                className="pl-10 text-center font-mono tracking-widest text-lg"
+                              />
+                            </div>
+                            <p className="text-[11px] text-dark-300">
+                              {t('login.totp.orBackupCode')}
+                            </p>
+                          </div>
+                          <Button
+                            type="submit"
+                            className={cn(
+                              'w-full h-11 font-medium text-sm',
+                              'bg-gradient-to-r from-teal-600 to-cyan-600',
+                              'hover:from-teal-500 hover:to-cyan-500',
+                              'shadow-lg shadow-teal-900/20',
+                              'transition-all duration-200'
+                            )}
+                            disabled={totpCode.length < 6}
+                          >
+                            <KeyRound className="w-4 h-4 mr-2" />
+                            {t('login.totp.verifyButton')}
+                          </Button>
+                        </form>
+
+                        <div className="text-center">
+                          <button
+                            onClick={cancel2fa}
+                            className="text-xs text-dark-300 hover:text-red-400 transition-colors"
+                          >
+                            {t('login.totp.cancel')}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : needsSetup ? (
                   <form onSubmit={handleRegister} className="space-y-4 mb-5">
                     <div
                       className="p-3 rounded-lg border border-teal-500/20 mb-4"

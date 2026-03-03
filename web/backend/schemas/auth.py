@@ -64,6 +64,33 @@ class SetupStatusResponse(BaseModel):
     needs_setup: bool
 
 
+class LoginResponse(BaseModel):
+    """Login response — may require 2FA step."""
+
+    access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
+    token_type: str = "bearer"
+    expires_in: Optional[int] = None
+    requires_2fa: bool = False
+    totp_enabled: bool = False
+    temp_token: Optional[str] = None
+
+
+class TotpSetupResponse(BaseModel):
+    """Response with TOTP provisioning data for first-time setup."""
+
+    secret: str
+    qr_code: str  # base64 PNG
+    provisioning_uri: str
+    backup_codes: List[str]
+
+
+class TotpVerifyRequest(BaseModel):
+    """TOTP verification or setup confirmation request."""
+
+    code: str = Field(..., min_length=6, max_length=20)
+
+
 class AdminInfo(BaseModel):
     """Current admin info with RBAC data."""
 

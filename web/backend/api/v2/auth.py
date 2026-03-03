@@ -1,11 +1,13 @@
 """Auth API endpoints."""
+import json
 import logging
 from fastapi import APIRouter, HTTPException, Depends, Request
 
-from web.backend.api.deps import get_current_admin, AdminUser
+from web.backend.api.deps import get_current_admin, get_2fa_temp_admin, get_client_ip, AdminUser
 from web.backend.core.errors import api_error, E
 from web.backend.core.config import get_web_settings
 from web.backend.core.login_guard import login_guard
+from web.backend.core.fail2ban_logger import log_auth_failure
 from web.backend.core.notifier import (
     notify_login_failed,
     notify_login_success,
@@ -17,9 +19,21 @@ from web.backend.core.security import (
     verify_admin_password_async,
     create_access_token,
     create_refresh_token,
+    create_temp_2fa_token,
     decode_token,
 )
 from web.backend.core.token_blacklist import token_blacklist
+from web.backend.core.totp import (
+    generate_totp_secret,
+    encrypt_totp_secret,
+    decrypt_totp_secret,
+    encrypt_backup_codes,
+    get_provisioning_uri,
+    generate_qr_base64,
+    verify_totp_code,
+    generate_backup_codes,
+    verify_backup_code,
+)
 from web.backend.schemas.auth import (
     TelegramAuthData,
     LoginRequest,
@@ -27,6 +41,9 @@ from web.backend.schemas.auth import (
     SetupStatusResponse,
     ChangePasswordRequest,
     TokenResponse,
+    LoginResponse,
+    TotpSetupResponse,
+    TotpVerifyRequest,
     RefreshRequest,
     AdminInfo,
     PermissionEntry,
@@ -35,15 +52,6 @@ from web.backend.schemas.common import SuccessResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-
-def _get_client_ip(request: Request) -> str:
-    """Extract client IP, respecting X-Forwarded-For behind a reverse proxy."""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        # First IP in the chain is the original client
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
 
 
 @router.get("/setup-status", response_model=SetupStatusResponse)
@@ -85,7 +93,7 @@ async def register_admin(request: Request, data: RegisterRequest):
     This endpoint is only available during initial setup.
     """
     settings = get_web_settings()
-    client_ip = _get_client_ip(request)
+    client_ip = get_client_ip(request)
 
     # Check that no admin exists yet (guard against abuse)
     has_env_auth = bool(settings.admin_login and settings.admin_password)
@@ -141,16 +149,32 @@ async def register_admin(request: Request, data: RegisterRequest):
     )
 
 
-@router.post("/telegram", response_model=TokenResponse)
+async def _get_rbac_account(subject: str):
+    """Look up RBAC admin_account by login subject. Returns dict or None."""
+    try:
+        from web.backend.core.rbac import (
+            get_admin_account_by_username,
+            get_admin_account_by_telegram_id,
+        )
+        if subject.startswith("pwd:"):
+            return await get_admin_account_by_username(subject[4:])
+        else:
+            return await get_admin_account_by_telegram_id(int(subject))
+    except Exception as e:
+        logger.debug("RBAC account lookup: %s", e)
+    return None
+
+
+@router.post("/telegram", response_model=LoginResponse)
 @limiter.limit("5/minute")
 async def telegram_login(request: Request, data: TelegramAuthData):
     """
     Authenticate via Telegram Login Widget.
 
-    Verifies the data signature and creates JWT tokens.
+    Verifies the data signature and creates JWT tokens (or temp 2FA token).
     """
     settings = get_web_settings()
-    client_ip = _get_client_ip(request)
+    client_ip = get_client_ip(request)
 
     # Check brute-force lockout
     if login_guard.is_locked(client_ip):
@@ -170,6 +194,7 @@ async def telegram_login(request: Request, data: TelegramAuthData):
     if not is_valid:
         logger.warning("Auth verification failed for user id=%d: %s", data.id, error_message)
         locked = login_guard.record_failure(client_ip)
+        log_auth_failure(client_ip, f"tg:{data.id}", "telegram", error_message)
         await notify_login_failed(
             ip=client_ip,
             username=f"tg:{data.id}",
@@ -184,6 +209,7 @@ async def telegram_login(request: Request, data: TelegramAuthData):
     if data.id not in settings.admins:
         logger.warning(f"User {data.id} is not in admins list: {settings.admins}")
         locked = login_guard.record_failure(client_ip)
+        log_auth_failure(client_ip, f"tg:{data.id}", "telegram", "Not in admins list")
         await notify_login_failed(
             ip=client_ip,
             username=f"tg:{data.id} ({data.username or data.first_name})",
@@ -194,35 +220,47 @@ async def telegram_login(request: Request, data: TelegramAuthData):
             await notify_ip_blocked(client_ip, 900, 5)
         raise api_error(403, E.NOT_AN_ADMIN)
 
-    # Success
+    # Success — credentials valid
     login_guard.record_success(client_ip)
 
-    # Create tokens
     username = data.username or data.first_name
     subject = str(data.id)
+
+    logger.info("Login successful for user id=%d from %s", data.id, client_ip)
+
+    # Check 2FA requirement (RBAC accounts only)
+    account = await _get_rbac_account(subject)
+    if account:
+        # Don't notify login success yet — wait for 2FA completion
+        temp_token = create_temp_2fa_token(subject, auth_method="telegram")
+        return LoginResponse(
+            requires_2fa=True,
+            totp_enabled=bool(account.get("totp_enabled")),
+            temp_token=temp_token,
+        )
+
+    # Legacy admin (no RBAC account) — issue full tokens directly
+    await notify_login_success(ip=client_ip, username=username, auth_method="telegram")
     access_token = create_access_token(subject, username, auth_method="telegram")
     refresh_token = create_refresh_token(subject)
 
-    logger.info("Login successful for user id=%d from %s", data.id, client_ip)
-    await notify_login_success(ip=client_ip, username=username, auth_method="telegram")
-
-    return TokenResponse(
+    return LoginResponse(
         access_token=access_token,
         refresh_token=refresh_token,
         expires_in=settings.jwt_expire_minutes * 60,
     )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=LoginResponse)
 @limiter.limit("5/minute")
 async def password_login(request: Request, data: LoginRequest):
     """
     Authenticate with username and password.
 
-    WEB_ADMIN_LOGIN / WEB_ADMIN_PASSWORD must be configured in .env.
+    Returns full tokens or a temp 2FA token depending on account state.
     """
     settings = get_web_settings()
-    client_ip = _get_client_ip(request)
+    client_ip = get_client_ip(request)
 
     # Check brute-force lockout
     if login_guard.is_locked(client_ip):
@@ -250,32 +288,237 @@ async def password_login(request: Request, data: LoginRequest):
     if not await verify_admin_password_async(data.username, data.password):
         locked = login_guard.record_failure(client_ip)
         logger.warning("Password login failed for user '%s' from %s", data.username, client_ip)
+        log_auth_failure(client_ip, data.username, "password", "Invalid credentials")
         await notify_login_failed(
             ip=client_ip,
             username=data.username,
             auth_method="password",
             reason="Invalid credentials",
-            password=data.password,
         )
         if locked:
             await notify_ip_blocked(client_ip, 900, 5)
         raise api_error(401, E.INVALID_PASSWORD, "Invalid username or password")
 
-    # Success
+    # Success — credentials valid
     login_guard.record_success(client_ip)
 
     subject = f"pwd:{data.username}"
+
+    logger.info("Password login successful for user '%s' from %s", data.username, client_ip)
+
+    # Check 2FA requirement (RBAC accounts only)
+    account = await _get_rbac_account(subject)
+    if account:
+        # Don't notify login success yet — wait for 2FA completion
+        temp_token = create_temp_2fa_token(subject, auth_method="password")
+        return LoginResponse(
+            requires_2fa=True,
+            totp_enabled=bool(account.get("totp_enabled")),
+            temp_token=temp_token,
+        )
+
+    # Legacy .env admin — issue full tokens directly
+    await notify_login_success(ip=client_ip, username=data.username, auth_method="password")
     access_token = create_access_token(subject, data.username, auth_method="password")
     refresh_token = create_refresh_token(subject)
 
-    logger.info("Password login successful for user '%s' from %s", data.username, client_ip)
-    await notify_login_success(ip=client_ip, username=data.username, auth_method="password")
+    return LoginResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=settings.jwt_expire_minutes * 60,
+    )
 
+
+def _blacklist_temp_token(request: Request) -> None:
+    """Blacklist the 2FA temp token from current request to prevent reuse."""
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        payload = decode_token(token)
+        if payload and "exp" in payload:
+            token_blacklist.add(token, float(payload["exp"]))
+        else:
+            logger.warning("Failed to blacklist temp token: decode returned %s", payload)
+
+
+def _get_subject(admin: AdminUser) -> str:
+    """Build JWT subject string from AdminUser."""
+    if admin.auth_method == "password":
+        return f"pwd:{admin.username}"
+    return str(admin.telegram_id)
+
+
+@router.post("/totp/setup", response_model=TotpSetupResponse)
+@limiter.limit("5/minute")
+async def totp_setup(request: Request, admin: AdminUser = Depends(get_2fa_temp_admin)):
+    """Generate TOTP secret, QR code, and backup codes for first-time setup."""
+    subject = _get_subject(admin)
+    account = await _get_rbac_account(subject)
+    if not account:
+        raise api_error(404, E.ADMIN_NOT_FOUND)
+    if account.get("totp_enabled"):
+        raise api_error(400, E.FORBIDDEN, "TOTP is already enabled")
+
+    # Reuse existing secret if already generated (prevents race condition on re-call)
+    existing_secret = account.get("totp_secret")
+    if existing_secret:
+        try:
+            secret = decrypt_totp_secret(existing_secret)
+        except ValueError:
+            secret = None
+        if secret:
+            # Regenerate QR and codes from existing secret
+            uri = get_provisioning_uri(secret, admin.username)
+            qr = generate_qr_base64(uri)
+            # Decrypt existing backup codes
+            existing_codes = account.get("backup_codes")
+            if existing_codes:
+                from web.backend.core.totp import decrypt_backup_codes
+                codes = decrypt_backup_codes(existing_codes) or generate_backup_codes()
+            else:
+                codes = generate_backup_codes()
+                from web.backend.core.rbac import update_admin_account
+                await update_admin_account(account["id"], backup_codes=encrypt_backup_codes(codes))
+            return TotpSetupResponse(
+                secret=secret,
+                qr_code=qr,
+                provisioning_uri=uri,
+                backup_codes=codes,
+            )
+
+    # Generate new secret and backup codes
+    secret = generate_totp_secret()
+    uri = get_provisioning_uri(secret, admin.username)
+    qr = generate_qr_base64(uri)
+    codes = generate_backup_codes()
+
+    # Persist encrypted secret and backup codes (not yet enabled — confirm-setup activates)
+    from web.backend.core.rbac import update_admin_account
+    await update_admin_account(
+        account["id"],
+        totp_secret=encrypt_totp_secret(secret),
+        backup_codes=encrypt_backup_codes(codes),
+    )
+
+    return TotpSetupResponse(
+        secret=secret,
+        qr_code=qr,
+        provisioning_uri=uri,
+        backup_codes=codes,
+    )
+
+
+@router.post("/totp/confirm-setup", response_model=TokenResponse)
+@limiter.limit("5/minute")
+async def totp_confirm_setup(
+    request: Request,
+    data: TotpVerifyRequest,
+    admin: AdminUser = Depends(get_2fa_temp_admin),
+):
+    """Confirm TOTP setup by verifying the first code, then issue full tokens."""
+    subject = _get_subject(admin)
+    account = await _get_rbac_account(subject)
+    if not account or not account.get("totp_secret"):
+        raise api_error(400, E.FORBIDDEN, "Call /totp/setup first")
+
+    # Decrypt TOTP secret
+    try:
+        secret = decrypt_totp_secret(account["totp_secret"])
+    except ValueError:
+        raise api_error(500, E.FORBIDDEN, "Failed to decrypt TOTP secret")
+
+    client_ip = get_client_ip(request)
+    if not verify_totp_code(secret, data.code, account_id=account["id"]):
+        locked = login_guard.record_failure(client_ip)
+        log_auth_failure(client_ip, admin.username, "totp_setup", "Invalid TOTP code")
+        if locked:
+            await notify_ip_blocked(client_ip, 900, 5)
+        raise api_error(401, E.INVALID_TOKEN, "Invalid TOTP code")
+
+    # Enable 2FA
+    login_guard.record_success(client_ip)
+    from web.backend.core.rbac import update_admin_account
+    await update_admin_account(account["id"], totp_enabled=True)
+
+    # Blacklist temp token to prevent reuse
+    _blacklist_temp_token(request)
+
+    settings = get_web_settings()
+    access_token = create_access_token(subject, admin.username, auth_method=admin.auth_method)
+    refresh_token = create_refresh_token(subject)
+
+    logger.info("TOTP enabled for user '%s'", admin.username)
+    await notify_login_success(ip=client_ip, username=admin.username, auth_method=admin.auth_method)
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
         expires_in=settings.jwt_expire_minutes * 60,
     )
+
+
+@router.post("/totp/verify", response_model=TokenResponse)
+@limiter.limit("10/minute")
+async def totp_verify(
+    request: Request,
+    data: TotpVerifyRequest,
+    admin: AdminUser = Depends(get_2fa_temp_admin),
+):
+    """Verify TOTP code (or backup code) and issue full tokens."""
+    subject = _get_subject(admin)
+    account = await _get_rbac_account(subject)
+    if not account or not account.get("totp_enabled") or not account.get("totp_secret"):
+        raise api_error(400, E.FORBIDDEN, "TOTP is not set up")
+
+    client_ip = get_client_ip(request)
+    code = data.code.strip()
+
+    # Decrypt TOTP secret
+    try:
+        secret = decrypt_totp_secret(account["totp_secret"])
+    except ValueError:
+        raise api_error(500, E.FORBIDDEN, "Failed to decrypt TOTP secret")
+
+    # Try TOTP code first
+    if verify_totp_code(secret, code, account_id=account["id"]):
+        login_guard.record_success(client_ip)
+        _blacklist_temp_token(request)
+
+        settings = get_web_settings()
+        access_token = create_access_token(subject, admin.username, auth_method=admin.auth_method)
+        refresh_token = create_refresh_token(subject)
+        await notify_login_success(ip=client_ip, username=admin.username, auth_method=admin.auth_method)
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=settings.jwt_expire_minutes * 60,
+        )
+
+    # Try backup code (already encrypted in DB)
+    is_valid, updated_codes = verify_backup_code(account.get("backup_codes"), code)
+    if is_valid:
+        from web.backend.core.rbac import update_admin_account
+        await update_admin_account(account["id"], backup_codes=updated_codes)
+        logger.info("Backup code used by '%s'", admin.username)
+
+        login_guard.record_success(client_ip)
+        _blacklist_temp_token(request)
+
+        settings = get_web_settings()
+        access_token = create_access_token(subject, admin.username, auth_method=admin.auth_method)
+        refresh_token = create_refresh_token(subject)
+        await notify_login_success(ip=client_ip, username=admin.username, auth_method=admin.auth_method)
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=settings.jwt_expire_minutes * 60,
+        )
+
+    # Both TOTP and backup failed
+    locked = login_guard.record_failure(client_ip)
+    log_auth_failure(client_ip, admin.username, "totp", "Invalid TOTP/backup code")
+    if locked:
+        await notify_ip_blocked(client_ip, 900, 5)
+    raise api_error(401, E.INVALID_TOKEN, "Invalid code")
 
 
 @router.post("/refresh", response_model=TokenResponse)

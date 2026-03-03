@@ -1,6 +1,12 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
-import { authApi, TelegramUser, LoginCredentials, RegisterCredentials } from '../api/auth'
+import {
+  authApi,
+  TelegramUser,
+  LoginCredentials,
+  RegisterCredentials,
+  TotpSetupResponse,
+} from '../api/auth'
 import { registerAuthGetter } from './authBridge'
 
 // Safe localStorage wrapper to prevent quota errors
@@ -50,10 +56,20 @@ interface AuthState {
   isLoading: boolean
   error: string | null
 
+  // 2FA state (transient, not persisted)
+  requires2fa: boolean
+  totpEnabled: boolean
+  tempToken: string | null
+  totpSetupData: TotpSetupResponse | null
+
   // Actions
   login: (telegramUser: TelegramUser) => Promise<void>
   loginWithPassword: (credentials: LoginCredentials) => Promise<void>
   register: (credentials: RegisterCredentials) => Promise<void>
+  totpSetup: () => Promise<void>
+  totpConfirmSetup: (code: string) => Promise<void>
+  totpVerify: (code: string) => Promise<void>
+  cancel2fa: () => void
   logout: () => void
   setTokens: (accessToken: string, refreshToken: string) => void
   clearError: () => void
@@ -86,12 +102,34 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      requires2fa: false,
+      totpEnabled: false,
+      tempToken: null,
+      totpSetupData: null,
 
       login: async (telegramUser: TelegramUser) => {
         set({ isLoading: true, error: null })
 
         try {
           const response = await authApi.telegramLogin(telegramUser)
+
+          if (response.requires_2fa) {
+            set({
+              requires2fa: true,
+              totpEnabled: response.totp_enabled,
+              tempToken: response.temp_token || null,
+              user: {
+                telegramId: telegramUser.id,
+                username: telegramUser.username || telegramUser.first_name,
+                firstName: telegramUser.first_name,
+                lastName: telegramUser.last_name,
+                photoUrl: telegramUser.photo_url,
+                authMethod: 'telegram',
+              },
+              isLoading: false,
+            })
+            return
+          }
 
           set({
             user: {
@@ -102,8 +140,8 @@ export const useAuthStore = create<AuthState>()(
               photoUrl: telegramUser.photo_url,
               authMethod: 'telegram',
             },
-            accessToken: response.access_token,
-            refreshToken: response.refresh_token,
+            accessToken: response.access_token || null,
+            refreshToken: response.refresh_token || null,
             isAuthenticated: true,
             isLoading: false,
           })
@@ -122,14 +160,29 @@ export const useAuthStore = create<AuthState>()(
         try {
           const response = await authApi.passwordLogin(credentials)
 
+          if (response.requires_2fa) {
+            set({
+              requires2fa: true,
+              totpEnabled: response.totp_enabled,
+              tempToken: response.temp_token || null,
+              user: {
+                username: credentials.username,
+                firstName: credentials.username,
+                authMethod: 'password',
+              },
+              isLoading: false,
+            })
+            return
+          }
+
           set({
             user: {
               username: credentials.username,
               firstName: credentials.username,
               authMethod: 'password',
             },
-            accessToken: response.access_token,
-            refreshToken: response.refresh_token,
+            accessToken: response.access_token || null,
+            refreshToken: response.refresh_token || null,
             isAuthenticated: true,
             isLoading: false,
           })
@@ -166,6 +219,80 @@ export const useAuthStore = create<AuthState>()(
           })
           throw error
         }
+      },
+
+      totpSetup: async () => {
+        const { tempToken } = get()
+        if (!tempToken) throw new Error('No temp token')
+        set({ isLoading: true, error: null })
+        try {
+          const data = await authApi.totpSetup(tempToken)
+          set({ totpSetupData: data, isLoading: false })
+        } catch (error) {
+          set({
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'TOTP setup failed',
+          })
+          throw error
+        }
+      },
+
+      totpConfirmSetup: async (code: string) => {
+        const { tempToken } = get()
+        if (!tempToken) throw new Error('No temp token')
+        set({ isLoading: true, error: null })
+        try {
+          const response = await authApi.totpConfirmSetup(tempToken, code)
+          set({
+            accessToken: response.access_token,
+            refreshToken: response.refresh_token,
+            isAuthenticated: true,
+            isLoading: false,
+            requires2fa: false,
+            tempToken: null,
+            totpSetupData: null,
+          })
+        } catch (error) {
+          set({
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'TOTP verification failed',
+          })
+          throw error
+        }
+      },
+
+      totpVerify: async (code: string) => {
+        const { tempToken } = get()
+        if (!tempToken) throw new Error('No temp token')
+        set({ isLoading: true, error: null })
+        try {
+          const response = await authApi.totpVerify(tempToken, code)
+          set({
+            accessToken: response.access_token,
+            refreshToken: response.refresh_token,
+            isAuthenticated: true,
+            isLoading: false,
+            requires2fa: false,
+            tempToken: null,
+          })
+        } catch (error) {
+          set({
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'TOTP verification failed',
+          })
+          throw error
+        }
+      },
+
+      cancel2fa: () => {
+        set({
+          requires2fa: false,
+          totpEnabled: false,
+          tempToken: null,
+          totpSetupData: null,
+          user: null,
+          error: null,
+        })
       },
 
       logout: () => {

@@ -23,6 +23,27 @@ export interface TokenResponse {
   expires_in: number
 }
 
+export interface LoginResponse {
+  access_token?: string
+  refresh_token?: string
+  token_type?: string
+  expires_in?: number
+  requires_2fa: boolean
+  totp_enabled: boolean
+  temp_token?: string
+}
+
+export interface TotpSetupResponse {
+  secret: string
+  qr_code: string
+  provisioning_uri: string
+  backup_codes: string[]
+}
+
+export interface TotpVerifyRequest {
+  code: string
+}
+
 export interface PermissionEntry {
   resource: string
   action: string
@@ -114,9 +135,9 @@ export const authApi = {
   /**
    * Login with Telegram Login Widget data
    */
-  telegramLogin: async (data: TelegramUser): Promise<TokenResponse> => {
+  telegramLogin: async (data: TelegramUser): Promise<LoginResponse> => {
     try {
-      const response = await client.post<TokenResponse>('/auth/telegram', data)
+      const response = await client.post<LoginResponse>('/auth/telegram', data)
       return response.data
     } catch (error) {
       throw new Error(getErrorMessage(error))
@@ -126,9 +147,57 @@ export const authApi = {
   /**
    * Login with username and password
    */
-  passwordLogin: async (data: LoginCredentials): Promise<TokenResponse> => {
+  passwordLogin: async (data: LoginCredentials): Promise<LoginResponse> => {
     try {
-      const response = await client.post<TokenResponse>('/auth/login', data)
+      const response = await client.post<LoginResponse>('/auth/login', data)
+      return response.data
+    } catch (error) {
+      throw new Error(getErrorMessage(error))
+    }
+  },
+
+  /**
+   * TOTP setup — get QR code and backup codes (requires temp token)
+   */
+  totpSetup: async (tempToken: string): Promise<TotpSetupResponse> => {
+    try {
+      const response = await client.post<TotpSetupResponse>(
+        '/auth/totp/setup',
+        {},
+        { headers: { Authorization: `Bearer ${tempToken}` } }
+      )
+      return response.data
+    } catch (error) {
+      throw new Error(getErrorMessage(error))
+    }
+  },
+
+  /**
+   * Confirm TOTP setup with first code (requires temp token)
+   */
+  totpConfirmSetup: async (tempToken: string, code: string): Promise<TokenResponse> => {
+    try {
+      const response = await client.post<TokenResponse>(
+        '/auth/totp/confirm-setup',
+        { code },
+        { headers: { Authorization: `Bearer ${tempToken}` } }
+      )
+      return response.data
+    } catch (error) {
+      throw new Error(getErrorMessage(error))
+    }
+  },
+
+  /**
+   * Verify TOTP code (requires temp token)
+   */
+  totpVerify: async (tempToken: string, code: string): Promise<TokenResponse> => {
+    try {
+      const response = await client.post<TokenResponse>(
+        '/auth/totp/verify',
+        { code },
+        { headers: { Authorization: `Bearer ${tempToken}` } }
+      )
       return response.data
     } catch (error) {
       throw new Error(getErrorMessage(error))

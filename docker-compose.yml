@@ -146,6 +146,7 @@ services:
     init: true
     environment:
       - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-}
+      - WEB_SECRET_PATH=${WEB_SECRET_PATH:-}
     volumes:
       - ./logs:/app/logs
     ports:

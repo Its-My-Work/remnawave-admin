@@ -13,7 +13,13 @@ import { getAuthState } from '../store/authBridge'
  */
 function getApiBaseUrl(): string {
   const envUrl = window.__ENV?.API_URL || import.meta.env.VITE_API_URL || ''
-  if (!envUrl) return '/api/v2'
+
+  if (!envUrl) {
+    // Relative path — prepend secret path prefix if set
+    const secretPath = window.__ENV?.SECRET_PATH || ''
+    const prefix = secretPath ? `/${secretPath.replace(/^\/|\/$/g, '')}` : ''
+    return `${prefix}/api/v2`
+  }
 
   // Auto-fix Mixed Content: upgrade http:// to https:// if page is served over HTTPS
   if (
@@ -89,8 +95,11 @@ function forceLogout() {
     auth.logout()
   }
   // Only redirect if not already on the login page
-  if (window.location.pathname !== '/login') {
-    window.location.href = '/login'
+  const secretPath = window.__ENV?.SECRET_PATH || ''
+  const prefix = secretPath ? `/${secretPath.replace(/^\/|\/$/g, '')}` : ''
+  const loginPath = `${prefix}/login`
+  if (!window.location.pathname.endsWith('/login')) {
+    window.location.href = loginPath
   }
 }
 

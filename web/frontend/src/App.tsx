@@ -7,6 +7,10 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { clientLogger } from './lib/clientLogger'
 import { ForcePasswordChange } from './components/ForcePasswordChange'
 
+// Normalize SECRET_PATH: ensure leading slash for BrowserRouter basename
+const rawSecretPath = window.__ENV?.SECRET_PATH || '/'
+const routerBasename = rawSecretPath.startsWith('/') ? rawSecretPath : `/${rawSecretPath}`
+
 // Layout
 import Layout from './components/layout/Layout'
 
@@ -95,7 +99,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AppearanceProvider>
-        <BrowserRouter>
+        <BrowserRouter basename={routerBasename}>
           <Routes>
             {/* Public routes */}
             <Route path="/login" element={<Login />} />
