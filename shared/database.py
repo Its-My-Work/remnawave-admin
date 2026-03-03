@@ -1442,12 +1442,21 @@ class DatabaseService:
 
         async with self.acquire() as conn:
             async with conn.transaction():
+                # Detect ip_address column type (INET vs VARCHAR) — cache once
+                if not hasattr(self, '_ip_col_is_inet'):
+                    col_type = await conn.fetchval(
+                        "SELECT data_type FROM information_schema.columns "
+                        "WHERE table_name = 'user_connections' AND column_name = 'ip_address'"
+                    )
+                    self._ip_col_is_inet = (col_type == 'inet')
+
+                ip_cast = "::inet" if self._ip_col_is_inet else ""
+
                 # 1. Bulk upsert via UNNEST + ON CONFLICT on partial unique index
-                # ip_address column is INET — cast text to inet explicitly
                 upsert_result = await conn.execute(
-                    """
+                    f"""
                     INSERT INTO user_connections (user_uuid, ip_address, node_uuid, device_info, connected_at)
-                    SELECT u::uuid, u_ip::inet, n::uuid, d::jsonb, COALESCE(t, NOW())
+                    SELECT u::uuid, u_ip{ip_cast}, n::uuid, d::jsonb, COALESCE(t, NOW())
                     FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[], $5::timestamptz[])
                         AS t(u, u_ip, n, d, t)
                     ON CONFLICT (user_uuid, ip_address) WHERE disconnected_at IS NULL
@@ -1461,16 +1470,17 @@ class DatabaseService:
                 upserted = int(upsert_result.split()[-1]) if upsert_result else 0
 
                 # 2. Close stale connections — IPs not in this batch, older than threshold
+                # Cast ip_address to text for comparison (works with both INET and VARCHAR)
                 close_result = await conn.execute(
-                    """
+                    f"""
                     UPDATE user_connections uc
                     SET disconnected_at = NOW()
                     FROM (
-                        SELECT DISTINCT u::uuid AS uid, i::inet AS ip
+                        SELECT DISTINCT u::uuid AS uid, i{ip_cast} AS ip
                         FROM UNNEST($1::text[], $2::text[]) AS t(u, i)
                     ) batch
                     WHERE uc.user_uuid = batch.uid
-                      AND uc.ip_address != batch.ip
+                      AND uc.ip_address::text != batch.ip::text
                       AND uc.disconnected_at IS NULL
                       AND uc.connected_at < NOW() - make_interval(mins => $3)
                     """,
