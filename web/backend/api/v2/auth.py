@@ -255,9 +255,11 @@ async def telegram_login(request: Request, data: TelegramAuthData):
 
     logger.info("Login successful for user id=%d from %s", data.id, client_ip)
 
-    # Check 2FA requirement (RBAC accounts only)
+    # Check 2FA requirement (global toggle)
+    totp_required = config_service.get("auth_totp_required", False)
     account = await _get_rbac_account(subject)
-    if account:
+
+    if totp_required and account:
         # Don't notify login success yet — wait for 2FA completion
         temp_token = create_temp_2fa_token(subject, auth_method="telegram")
         return LoginResponse(
@@ -266,11 +268,10 @@ async def telegram_login(request: Request, data: TelegramAuthData):
             temp_token=temp_token,
         )
 
-    # If TOTP is globally required but user has no RBAC account — block full access
-    if config_service.get("auth_totp_required", False):
+    if totp_required and not account:
         raise api_error(403, E.FORBIDDEN, "2FA is required. Please contact administrator to set up your account.")
 
-    # Legacy admin (no RBAC account) — issue full tokens directly
+    # 2FA disabled or no RBAC account — issue full tokens directly
     await notify_login_success(ip=client_ip, username=username, auth_method="telegram")
     access_token = create_access_token(subject, username, auth_method="telegram")
     refresh_token = create_refresh_token(subject)
@@ -347,9 +348,11 @@ async def password_login(request: Request, data: LoginRequest):
 
     logger.info("Password login successful for user '%s' from %s", data.username, client_ip)
 
-    # Check 2FA requirement (RBAC accounts only)
+    # Check 2FA requirement (global toggle)
+    totp_required = config_service.get("auth_totp_required", False)
     account = await _get_rbac_account(subject)
-    if account:
+
+    if totp_required and account:
         # Don't notify login success yet — wait for 2FA completion
         temp_token = create_temp_2fa_token(subject, auth_method="password")
         return LoginResponse(
@@ -358,11 +361,10 @@ async def password_login(request: Request, data: LoginRequest):
             temp_token=temp_token,
         )
 
-    # If TOTP is globally required but user has no RBAC account — block full access
-    if config_service.get("auth_totp_required", False):
+    if totp_required and not account:
         raise api_error(403, E.FORBIDDEN, "2FA is required. Please contact administrator to set up your account.")
 
-    # Legacy .env admin — issue full tokens directly
+    # 2FA disabled or no RBAC account — issue full tokens directly
     await notify_login_success(ip=client_ip, username=data.username, auth_method="password")
     access_token = create_access_token(subject, data.username, auth_method="password")
     refresh_token = create_refresh_token(subject)
