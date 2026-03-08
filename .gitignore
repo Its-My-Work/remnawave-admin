@@ -19,6 +19,7 @@ design-mockups/
 chroma_data/
 tmp_files.txt
 api-1.yaml
+api-1.json
 
 # Node Agent
 node-agent/.env

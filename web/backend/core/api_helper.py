@@ -250,6 +250,41 @@ async def fetch_nodes_realtime_usage() -> List[Dict[str, Any]]:
     return []
 
 
+async def enrich_nodes_traffic_today(nodes: List[Dict[str, Any]]) -> None:
+    """Enrich nodes with traffic_today_bytes from bandwidth stats APIs.
+
+    Mutates nodes in-place. Uses date-range API first, falls back to realtime.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    today_str = now.strftime('%Y-%m-%d')
+    tomorrow_str = (now + timedelta(days=1)).strftime('%Y-%m-%d')
+    try:
+        resp = await fetch_nodes_usage_by_range(start=today_str, end=tomorrow_str)
+        if resp:
+            for tn in resp.get('topNodes', []):
+                uid = tn.get('uuid')
+                if uid:
+                    today_val = int(tn.get('total', 0) or 0)
+                    for n in nodes:
+                        if n.get('uuid') == uid:
+                            n['traffic_today_bytes'] = today_val
+                            break
+    except Exception:
+        pass
+    try:
+        realtime = await fetch_nodes_realtime_usage()
+        rt_map = {r.get('nodeUuid'): r for r in realtime}
+        for n in nodes:
+            if not n.get('traffic_today_bytes'):
+                rt = rt_map.get(n.get('uuid'))
+                if rt:
+                    n['traffic_today_bytes'] = int(rt.get('totalBytes') or 0)
+    except Exception:
+        pass
+
+
 async def close_client():
     """Close the shared httpx client."""
     global _client

@@ -263,13 +263,17 @@ class AutomationEngine:
                 }
                 if rule["action_type"] == "notify":
                     try:
-                        from web.backend.core.api_helper import fetch_users_from_api, fetch_nodes_from_api
+                        from web.backend.core.api_helper import (
+                            fetch_users_from_api, fetch_nodes_from_api,
+                            enrich_nodes_traffic_today,
+                        )
                         users = await fetch_users_from_api()
                         nodes = await fetch_nodes_from_api()
                         context["users_total"] = len(users)
                         context["users_online"] = sum(1 for u in users if u.get("online_at"))
                         context["nodes_total"] = len(nodes)
                         context["nodes_online"] = sum(1 for n in nodes if n.get("is_connected"))
+                        await enrich_nodes_traffic_today(nodes)
                         total_traffic = sum(n.get("traffic_today_bytes", 0) for n in nodes)
                         context["traffic_today"] = f"{total_traffic / (1024 ** 3):.2f} GB"
                     except Exception:
@@ -321,7 +325,7 @@ class AutomationEngine:
             try_acquire_trigger,
             write_automation_log,
         )
-        from web.backend.core.api_helper import fetch_users_from_api, fetch_nodes_from_api
+        from web.backend.core.api_helper import fetch_users_from_api, fetch_nodes_from_api, enrich_nodes_traffic_today
 
         rules = await get_enabled_rules_by_trigger_type("threshold")
         if not rules:
@@ -358,6 +362,7 @@ class AutomationEngine:
                 elif metric == "traffic_today":
                     if nodes is None:
                         nodes = await fetch_nodes_from_api()
+                        await enrich_nodes_traffic_today(nodes)
                     total_traffic = sum(n.get("traffic_today_bytes", 0) for n in nodes)
                     total_gb = total_traffic / (1024 ** 3)
                     if op_fn(total_gb, threshold_value):
@@ -814,7 +819,7 @@ class AutomationEngine:
     async def dry_run(self, rule_id: int) -> dict:
         """Simulate execution of a rule without performing side effects."""
         from web.backend.core.automation import get_automation_rule_by_id
-        from web.backend.core.api_helper import fetch_users_from_api, fetch_nodes_from_api
+        from web.backend.core.api_helper import fetch_users_from_api, fetch_nodes_from_api, enrich_nodes_traffic_today
 
         rule = await get_automation_rule_by_id(rule_id)
         if not rule:
@@ -913,6 +918,8 @@ class AutomationEngine:
 
             elif metric in ("users_online", "traffic_today", "node_uptime_percent") and op_fn:
                 nodes = await fetch_nodes_from_api()
+                if metric == "traffic_today":
+                    await enrich_nodes_traffic_today(nodes)
                 if metric == "users_online":
                     total = sum(n.get("users_online", 0) for n in nodes)
                     if op_fn(total, threshold_value):
