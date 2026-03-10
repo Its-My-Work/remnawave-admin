@@ -22,20 +22,37 @@ async def _send_telegram_message(text: str, topic_id: Optional[int] = None) -> b
     settings = get_web_settings()
     bot_token = settings.telegram_bot_token
 
-    # Get chat_id from settings (reads .env via pydantic_settings)
-    chat_id = settings.notifications_chat_id
+    # Read chat_id from config_service (DB > .env) for live updates
+    try:
+        from shared.config_service import config_service
+        chat_id = config_service.get("notifications_chat_id")
+    except Exception:
+        chat_id = None
+    if not chat_id:
+        chat_id = settings.notifications_chat_id
     if not chat_id:
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return False
 
-    # Get service topic from settings
+    # Get service topic from config_service (DB > .env)
     if topic_id is None:
-        topic_id_str = settings.notifications_topic_service or settings.notifications_topic_id
-        if topic_id_str:
-            try:
-                topic_id = int(topic_id_str)
-            except (ValueError, TypeError):
-                pass
+        try:
+            from shared.config_service import config_service
+            topic_id_val = config_service.get("notifications_topic_service")
+            if topic_id_val is None:
+                topic_id_val = config_service.get("notifications_topic_id")
+            if topic_id_val is not None:
+                topic_id = int(topic_id_val)
+        except Exception:
+            pass
+        # Fallback to .env via pydantic settings
+        if topic_id is None:
+            topic_id_str = settings.notifications_topic_service or settings.notifications_topic_id
+            if topic_id_str:
+                try:
+                    topic_id = int(topic_id_str)
+                except (ValueError, TypeError):
+                    pass
 
     url = f"{_TELEGRAM_API}/bot{bot_token}/sendMessage"
     payload = {

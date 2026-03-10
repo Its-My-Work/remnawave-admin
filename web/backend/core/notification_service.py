@@ -20,13 +20,29 @@ def _get_global_telegram_config(topic_type: str = "service") -> tuple:
     ``topic_type`` selects the Telegram topic: "nodes", "service",
     "users", "errors", "violations", etc.  Falls back to the general
     NOTIFICATIONS_TOPIC_ID when a per-type topic is not configured.
+
+    Topic IDs are read from config_service (DB > .env > default) so that
+    changes made via the Settings UI take effect without a restart.
     """
     try:
         from web.backend.core.config import get_web_settings
         settings = get_web_settings()
         bot_token = settings.telegram_bot_token or None
-        chat_id = settings.notifications_chat_id or None
-        topic_id = settings.get_topic_for(topic_type)
+
+        # Read chat_id and topics from config_service (DB-first, .env fallback)
+        from shared.config_service import config_service
+        chat_id = config_service.get("notifications_chat_id") or settings.notifications_chat_id
+        chat_id = str(chat_id) if chat_id else None
+
+        topic_key = f"notifications_topic_{topic_type}"
+        topic_id = config_service.get(topic_key)
+        if topic_id is None:
+            topic_id = config_service.get("notifications_topic_id")
+        # Final fallback to .env via pydantic settings
+        if topic_id is None:
+            topic_id = settings.get_topic_for(topic_type)
+        topic_id = str(topic_id) if topic_id else None
+
         return bot_token, chat_id, topic_id
     except Exception as e:
         logger.debug("Telegram config not available: %s", e)

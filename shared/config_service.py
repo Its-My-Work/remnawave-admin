@@ -158,6 +158,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 1,
     },
     {
+        "key": "notifications_topic_id",
+        "value_type": "int",
+        "category": "notifications",
+        "subcategory": "topics",
+        "display_name": "Топик: Общий (fallback)",
+        "description": "ID топика по умолчанию, используется если специфический топик не задан",
+        "env_var_name": "NOTIFICATIONS_TOPIC_ID",
+        "sort_order": 9,
+    },
+    {
         "key": "notifications_topic_users",
         "value_type": "int",
         "category": "notifications",

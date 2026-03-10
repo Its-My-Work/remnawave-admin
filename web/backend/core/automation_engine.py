@@ -593,6 +593,10 @@ class AutomationEngine:
         if isinstance(action_config, str):
             action_config = json.loads(action_config)
 
+        # Enrich context with rule metadata for downstream handlers (e.g. topic routing)
+        context.setdefault("rule_id", rule.get("id"))
+        context.setdefault("category", rule.get("category", "system"))
+
         try:
             handler = {
                 "disable_user": self._action_disable_user,
@@ -671,10 +675,29 @@ class AutomationEngine:
                 message = message.replace(f"{{{key}}}", str(value))
 
         if channel == "telegram":
-            from web.backend.core.notifier import _send_telegram_message, _esc
-            text = f"<b>Automation</b>\n\n{_esc(message)}"
-            success = await _send_telegram_message(text)
-            return {"action": "notify", "channel": "telegram", "sent": success}
+            from web.backend.core.notification_service import create_notification
+            # Route to the correct Telegram topic:
+            # 1. Explicit topic_type in action_config (user override)
+            # 2. Rule category (users/nodes/violations/system)
+            # "system" category maps to "service" topic.
+            topic_type = config.get("topic_type")
+            if not topic_type:
+                category = context.get("category", target_type or "service")
+                topic_type = category if category != "system" else "service"
+
+            await create_notification(
+                title="Automation",
+                body=message,
+                type="automation",
+                severity="info",
+                source="automation",
+                source_id=str(context.get("rule_id", "")),
+                group_key=f"automation:{context.get('rule_id', '')}:{target_id}",
+                channels=["telegram", "in_app"],
+                topic_type=topic_type,
+                telegram_body=message,
+            )
+            return {"action": "notify", "channel": "telegram", "sent": True}
 
         elif channel == "webhook":
             webhook_url = config.get("webhook_url")
