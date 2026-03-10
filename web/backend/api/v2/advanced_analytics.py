@@ -579,3 +579,44 @@ async def _compute_node_metrics_history(period: str = "24h", node_uuid: Optional
     except Exception as e:
         logger.error("get_node_metrics_history failed: %s", e)
         return {"nodes": [], "timeseries": []}
+
+
+# ── Torrent / P2P Analytics ────────────────────────────────────────
+
+@router.get("/torrent-stats")
+@limiter.limit(RATE_ANALYTICS)
+async def get_torrent_stats(
+    request: Request,
+    days: int = Query(7, ge=1, le=90, description="Days to look back"),
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Get torrent/P2P event statistics and timeseries."""
+    return await _compute_torrent_stats(days=days)
+
+
+@cached("analytics:torrent-stats", ttl=300, key_args=("days",))
+async def _compute_torrent_stats(days: int = 7):
+    from shared.database import db_service
+
+    try:
+        if not db_service.is_connected:
+            return {"summary": {}, "timeseries": [], "top_users": [], "top_destinations": []}
+
+        stats = await db_service.get_torrent_stats(days=days)
+        timeseries = await db_service.get_torrent_timeseries(days=days)
+        top_destinations = await db_service.get_torrent_top_destinations(days=days)
+
+        return {
+            "summary": {
+                "total_events": stats.get("total_events", 0),
+                "unique_users": stats.get("unique_users", 0),
+                "unique_destinations": stats.get("unique_destinations", 0),
+                "affected_nodes": stats.get("affected_nodes", 0),
+            },
+            "timeseries": timeseries,
+            "top_users": stats.get("top_users", []),
+            "top_destinations": top_destinations,
+        }
+    except Exception as e:
+        logger.error("get_torrent_stats failed: %s", e)
+        return {"summary": {}, "timeseries": [], "top_users": [], "top_destinations": []}

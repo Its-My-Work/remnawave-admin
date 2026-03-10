@@ -2236,6 +2236,66 @@ class DatabaseService:
             logger.error("get_torrent_stats failed: %s", e)
             return {}
 
+    async def get_torrent_timeseries(self, days: int = 7) -> list:
+        """Get torrent event counts grouped by day."""
+        if not self.is_connected:
+            return []
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT date_trunc('day', detected_at) AS day,
+                           COUNT(*) AS event_count,
+                           COUNT(DISTINCT user_uuid) AS unique_users
+                    FROM torrent_events
+                    WHERE detected_at > NOW() - make_interval(days => $1)
+                    GROUP BY day
+                    ORDER BY day
+                    """,
+                    days,
+                )
+                return [
+                    {
+                        "date": r["day"].isoformat() if r["day"] else None,
+                        "events": r["event_count"],
+                        "users": r["unique_users"],
+                    }
+                    for r in rows
+                ]
+        except Exception as e:
+            logger.error("get_torrent_timeseries failed: %s", e)
+            return []
+
+    async def get_torrent_top_destinations(self, days: int = 7, limit: int = 15) -> list:
+        """Get top torrent destinations by event count."""
+        if not self.is_connected:
+            return []
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT destination, COUNT(*) AS event_count,
+                           COUNT(DISTINCT user_uuid) AS unique_users
+                    FROM torrent_events
+                    WHERE detected_at > NOW() - make_interval(days => $1)
+                    GROUP BY destination
+                    ORDER BY event_count DESC
+                    LIMIT $2
+                    """,
+                    days, limit,
+                )
+                return [
+                    {
+                        "destination": r["destination"],
+                        "events": r["event_count"],
+                        "users": r["unique_users"],
+                    }
+                    for r in rows
+                ]
+        except Exception as e:
+            logger.error("get_torrent_top_destinations failed: %s", e)
+            return []
+
     async def cleanup_old_torrent_events(self, retention_days: int = 90, batch_size: int = 5000) -> int:
         """Delete torrent events older than retention_days in batches."""
         if not self.is_connected:

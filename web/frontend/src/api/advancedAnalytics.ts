@@ -211,6 +211,11 @@ export const advancedAnalyticsApi = {
     const { data } = await client.get('/analytics/advanced/node-metrics-history', { params })
     return data
   },
+
+  torrentStats: async (days = 7): Promise<TorrentStatsResponse> => {
+    const { data } = await client.get('/analytics/advanced/torrent-stats', { params: { days } })
+    return data
+  },
 }
 
 export interface NodeMetricsHistoryItem {
@@ -234,4 +239,16 @@ export interface NodeMetricsHistoryResponse {
   nodes: NodeMetricsHistoryItem[]
   timeseries: NodeMetricsTimeseriesPoint[]
   node_names: Record<string, string>
+}
+
+export interface TorrentStatsResponse {
+  summary: {
+    total_events: number
+    unique_users: number
+    unique_destinations: number
+    affected_nodes: number
+  }
+  timeseries: { date: string; events: number; users: number }[]
+  top_users: { user_uuid: string; event_count: number }[]
+  top_destinations: { destination: string; events: number; users: number }[]
 }

@@ -1952,9 +1952,139 @@ function RetentionCard() {
   )
 }
 
+// ── Torrent / P2P Analytics ──────────────────────────────────────
+
+function TorrentAnalyticsCard() {
+  const { t } = useTranslation()
+  const chart = useChartTheme()
+  const [days, setDays] = useState('7')
+
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['torrent-stats', days],
+    queryFn: () => advancedAnalyticsApi.torrentStats(Number(days)),
+    staleTime: 60_000,
+  })
+
+  const summary = data?.summary ?? { total_events: 0, unique_users: 0, unique_destinations: 0, affected_nodes: 0 }
+  const timeseries = Array.isArray(data?.timeseries) ? data!.timeseries : []
+  const topUsers = Array.isArray(data?.top_users) ? data!.top_users : []
+  const topDest = Array.isArray(data?.top_destinations) ? data!.top_destinations : []
+
+  const chartData = useMemo(
+    () => timeseries.map((p) => ({ date: p.date?.slice(5, 10) ?? '', events: p.events, users: p.users })),
+    [timeseries],
+  )
+
+  return (
+    <Card className="animate-fade-in-up">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <Shield className="w-5 h-5 text-red-400" />
+            <CardTitle className="text-base">{t('analytics.torrent.title', { defaultValue: 'P2P / Torrent Activity' })}</CardTitle>
+          </div>
+          <PeriodSwitcher
+            value={days}
+            onChange={setDays}
+            options={[
+              { value: '7', label: '7d' },
+              { value: '30', label: '30d' },
+              { value: '90', label: '90d' },
+            ]}
+          />
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-64 w-full" />
+        ) : isError ? (
+          <QueryError onRetry={refetch} />
+        ) : !summary.total_events ? (
+          <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">
+            <p>{t('analytics.torrent.noData', { defaultValue: 'No torrent events detected' })}</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Summary badges */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: t('analytics.torrent.totalEvents', { defaultValue: 'Events' }), value: summary.total_events, color: 'text-red-400' },
+                { label: t('analytics.torrent.uniqueUsers', { defaultValue: 'Users' }), value: summary.unique_users, color: 'text-orange-400' },
+                { label: t('analytics.torrent.destinations', { defaultValue: 'Trackers' }), value: summary.unique_destinations, color: 'text-yellow-400' },
+                { label: t('analytics.torrent.affectedNodes', { defaultValue: 'Nodes' }), value: summary.affected_nodes, color: 'text-blue-400' },
+              ].map((s) => (
+                <div key={s.label} className="bg-[var(--glass-bg)] rounded-lg p-3 text-center">
+                  <p className={cn('text-xl font-bold', s.color)}>{s.value.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Timeline chart */}
+            {chartData.length > 1 && (
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
+                    <XAxis dataKey="date" stroke={chart.axis} fontSize={10} tickLine={false} />
+                    <YAxis stroke={chart.axis} fontSize={10} tickLine={false} axisLine={false} />
+                    <RechartsTooltip contentStyle={chart.tooltipStyle} />
+                    <Area type="monotone" dataKey="events" name={t('analytics.torrent.events', { defaultValue: 'Events' })} stroke="#ef4444" fill="#ef444420" strokeWidth={2} />
+                    <Area type="monotone" dataKey="users" name={t('analytics.torrent.users', { defaultValue: 'Users' })} stroke="#f97316" fill="#f9731620" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Top destinations + Top users side by side */}
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Top destinations */}
+              {topDest.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-muted-foreground mb-2">
+                    {t('analytics.torrent.topDestinations', { defaultValue: 'Top Trackers' })}
+                  </h4>
+                  <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                    {topDest.map((d, i) => (
+                      <div key={i} className="flex items-center justify-between bg-[var(--glass-bg)] rounded px-3 py-1.5 text-xs">
+                        <span className="text-white/80 truncate max-w-[200px]" title={d.destination}>{d.destination}</span>
+                        <div className="flex gap-3 text-muted-foreground shrink-0">
+                          <span>{d.events} evt</span>
+                          <span>{d.users} usr</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Top users */}
+              {topUsers.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-muted-foreground mb-2">
+                    {t('analytics.torrent.topUsers', { defaultValue: 'Top Violators' })}
+                  </h4>
+                  <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                    {topUsers.map((u, i) => (
+                      <div key={i} className="flex items-center justify-between bg-[var(--glass-bg)] rounded px-3 py-1.5 text-xs">
+                        <span className="text-white/80 font-mono truncate max-w-[200px]">{u.user_uuid.slice(0, 8)}...</span>
+                        <Badge variant="destructive" className="text-[10px]">{u.event_count}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 // ── Main Page ───────────────────────────────────────────────────
 
-const VALID_TABS = ['geography', 'users', 'trends', 'shared-hwids', 'providers', 'nodes', 'retention'] as const
+const VALID_TABS = ['geography', 'users', 'trends', 'shared-hwids', 'providers', 'nodes', 'torrent', 'retention'] as const
 
 export default function Analytics() {
   const { t } = useTranslation()
@@ -2006,6 +2136,10 @@ export default function Analytics() {
             <Server className="w-4 h-4" />
             {t('analytics.tabs.nodes', { defaultValue: 'Nodes' })}
           </TabsTrigger>
+          <TabsTrigger value="torrent" className="gap-1.5">
+            <Shield className="w-4 h-4" />
+            {t('analytics.tabs.torrent', { defaultValue: 'P2P / Torrent' })}
+          </TabsTrigger>
           <TabsTrigger value="retention" className="gap-1.5">
             <CalendarDays className="w-4 h-4" />
             {t('analytics.tabs.retention', { defaultValue: 'Retention' })}
@@ -2037,6 +2171,10 @@ export default function Analytics() {
             <NodesCard />
             <NodeMetricsHistoryCard />
           </div>
+        </TabsContent>
+
+        <TabsContent value="torrent">
+          <TorrentAnalyticsCard />
         </TabsContent>
 
         <TabsContent value="retention">
