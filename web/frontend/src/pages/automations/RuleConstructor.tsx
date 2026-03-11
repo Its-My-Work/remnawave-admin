@@ -178,7 +178,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
           setThresholdMetric(tc.metric || 'users_online')
           setThresholdOperator(tc.operator || '>=')
           setThresholdValue(tc.value?.toString() || '')
-          setThresholdNodeUuid(tc.node_uuid?.toString() || '')
+          setThresholdNodeUuid(tc.node_uuid?.toString() || '__all__')
         }
 
         // Conditions
@@ -223,7 +223,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         setThresholdMetric('users_online')
         setThresholdOperator('>=')
         setThresholdValue('')
-        setThresholdNodeUuid('')
+        setThresholdNodeUuid('__all__')
         setConditions([])
         setNotifyChannel('telegram')
         setNotifyMessage('')
@@ -262,7 +262,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         operator: thresholdOperator,
         value: parseFloat(thresholdValue) || 0,
       }
-      if (thresholdMetric === 'user_node_traffic_gb' && thresholdNodeUuid) {
+      if (thresholdMetric === 'user_node_traffic_gb' && thresholdNodeUuid && thresholdNodeUuid !== '__all__') {
         cfg.node_uuid = thresholdNodeUuid
       }
       return cfg
@@ -655,7 +655,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                         <SelectValue placeholder={t('automations.constructor.allNodes')} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">{t('automations.constructor.allNodes')}</SelectItem>
+                        <SelectItem value="__all__">{t('automations.constructor.allNodes')}</SelectItem>
                         {(nodesList || []).map((node) => (
                           <SelectItem key={node.uuid} value={node.uuid}>
                             <span className="flex items-center gap-2">
