@@ -58,11 +58,14 @@ describe('useAppearanceStore', () => {
       expect(useAppearanceStore.getState().colorMode).toBe('light')
     })
 
-    it('toggleColorMode toggles between dark and light', () => {
+    it('toggleColorMode cycles dark → light → auto → dark', () => {
       expect(useAppearanceStore.getState().colorMode).toBe('dark')
 
       useAppearanceStore.getState().toggleColorMode()
       expect(useAppearanceStore.getState().colorMode).toBe('light')
+
+      useAppearanceStore.getState().toggleColorMode()
+      expect(useAppearanceStore.getState().colorMode).toBe('auto')
 
       useAppearanceStore.getState().toggleColorMode()
       expect(useAppearanceStore.getState().colorMode).toBe('dark')

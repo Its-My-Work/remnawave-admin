@@ -1,5 +1,5 @@
 import { useMemo, useEffect, useState } from 'react'
-import { useAppearanceStore } from '../store/useAppearanceStore'
+import { useAppearanceStore, useResolvedColorMode } from '../store/useAppearanceStore'
 
 /**
  * Reads a CSS custom property value from :root / <html>.
@@ -74,9 +74,9 @@ function generatePalette(baseHex: string, count: number): string[] {
  * Uses CSS custom properties defined in index.css so colors stay in sync.
  */
 export function useChartTheme() {
-  const colorMode = useAppearanceStore((s) => s.colorMode)
+  const resolvedMode = useResolvedColorMode()
   const theme = useAppearanceStore((s) => s.theme)
-  const isLight = colorMode === 'light'
+  const isLight = resolvedMode === 'light'
 
   const [accentColor, setAccentColor] = useState('#06b6d4')
 
@@ -87,7 +87,7 @@ export function useChartTheme() {
       if (raw) setAccentColor(raw)
     }, 50)
     return () => clearTimeout(timer)
-  }, [theme, colorMode])
+  }, [theme, resolvedMode])
 
   return useMemo(
     () => ({

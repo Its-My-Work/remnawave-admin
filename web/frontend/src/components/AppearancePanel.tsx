@@ -1,4 +1,4 @@
-import { Paintbrush, RotateCcw, Sun, Moon } from 'lucide-react'
+import { Paintbrush, RotateCcw, Sun, Moon, Monitor } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   useAppearanceStore,
@@ -85,7 +85,7 @@ export function AppearancePanel() {
     fontSize,
     animationsEnabled,
     setTheme,
-    toggleColorMode,
+    setColorMode,
     setDensity,
     setBorderRadius,
     setFontSize,
@@ -170,27 +170,32 @@ export function AppearancePanel() {
             <Separator className="bg-[var(--glass-border)]" />
 
             {/* Color Mode */}
-            <div className="flex items-center justify-between">
+            <div className="space-y-2">
               <Label className="text-xs text-dark-200 uppercase tracking-wider">{t('appearance.colorMode')}</Label>
-              <button
-                onClick={toggleColorMode}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150",
-                  "bg-[var(--glass-bg)] border border-[var(--glass-border)] hover:border-[var(--glass-border)]/40"
-                )}
-              >
-                {colorMode === 'dark' ? (
-                  <>
-                    <Moon className="w-3.5 h-3.5 text-primary-400" />
-                    <span className="text-dark-100">Dark</span>
-                  </>
-                ) : (
-                  <>
-                    <Sun className="w-3.5 h-3.5 text-amber-400" />
-                    <span className="text-dark-100">Light</span>
-                  </>
-                )}
-              </button>
+              <div className="flex gap-1.5">
+                {([
+                  { value: 'dark' as const, icon: Moon, label: 'Dark' },
+                  { value: 'light' as const, icon: Sun, label: 'Light' },
+                  { value: 'auto' as const, icon: Monitor, label: 'Auto' },
+                ]).map(({ value, icon: Icon, label }) => {
+                  const isActive = colorMode === value
+                  return (
+                    <button
+                      key={value}
+                      onClick={() => setColorMode(value)}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-all duration-150",
+                        isActive
+                          ? "bg-primary/20 text-primary-400 border border-primary/30"
+                          : "bg-[var(--glass-bg)] text-dark-200 border border-[var(--glass-border)] hover:border-[var(--glass-border)]/40 hover:text-dark-50"
+                      )}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
             <Separator className="bg-[var(--glass-border)]" />

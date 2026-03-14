@@ -1,10 +1,10 @@
 import { Toaster as Sonner } from "sonner"
-import { useAppearanceStore } from "@/store/useAppearanceStore"
+import { useResolvedColorMode } from "@/store/useAppearanceStore"
 
 type ToasterProps = React.ComponentProps<typeof Sonner>
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const colorMode = useAppearanceStore((s) => s.colorMode)
+  const colorMode = useResolvedColorMode()
 
   return (
     <Sonner

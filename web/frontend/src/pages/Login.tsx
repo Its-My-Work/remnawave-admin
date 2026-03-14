@@ -155,6 +155,79 @@ function PasswordStrengthBar({ password }: { password: string }) {
   )
 }
 
+// TOTP code input form (shared between setup and verify)
+function TotpCodeForm({
+  onSubmit,
+  totpCode,
+  onCodeChange,
+  disabled,
+  buttonLabel,
+  buttonIcon: ButtonIcon,
+  hint,
+  onCancel,
+}: {
+  onSubmit: (e: React.FormEvent) => void
+  totpCode: string
+  onCodeChange: (code: string) => void
+  disabled: boolean
+  buttonLabel: string
+  buttonIcon: typeof Shield
+  hint?: string
+  onCancel: () => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="space-y-3">
+      <form onSubmit={onSubmit} className="space-y-3">
+        <div className="space-y-1">
+          <Label htmlFor="totp-code" className="text-dark-100 text-sm font-medium">
+            {t('login.totp.enterCode')}
+          </Label>
+          <div className="relative">
+            <Shield className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-dark-300" />
+            <Input
+              id="totp-code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={8}
+              value={totpCode}
+              onChange={(e) => onCodeChange(e.target.value.replace(/\s/g, ''))}
+              placeholder="000000"
+              autoFocus
+              className="pl-10 text-center font-mono tracking-widest text-lg"
+            />
+          </div>
+          {hint && <p className="text-[11px] text-dark-300">{hint}</p>}
+        </div>
+        <Button
+          type="submit"
+          className={cn(
+            'w-full h-11 font-medium text-sm',
+            'bg-gradient-to-r from-teal-600 to-cyan-600',
+            'hover:from-teal-500 hover:to-cyan-500',
+            'shadow-lg shadow-teal-900/20',
+            'transition-all duration-200'
+          )}
+          disabled={disabled}
+        >
+          <ButtonIcon className="w-4 h-4 mr-2" />
+          {buttonLabel}
+        </Button>
+      </form>
+      <div className="text-center">
+        <button
+          onClick={onCancel}
+          className="text-xs text-dark-300 hover:text-red-400 transition-colors"
+        >
+          {t('login.totp.cancel')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // Password input with toggle visibility
 function PasswordInput({
   id,
@@ -542,7 +615,8 @@ export default function Login() {
                             <img
                               src={`data:image/png;base64,${totpSetupData.qr_code}`}
                               alt="TOTP QR Code"
-                              className="w-48 h-48"
+                              className="w-36 h-36 sm:w-48 sm:h-48"
+                              onError={(e) => { e.currentTarget.style.display = 'none' }}
                             />
                           </div>
                         </div>
@@ -606,51 +680,15 @@ export default function Login() {
                         </div>
 
                         {/* Confirm code */}
-                        <form onSubmit={handleTotpVerify} className="space-y-3">
-                          <div className="space-y-1">
-                            <Label htmlFor="totp-code" className="text-dark-100 text-sm font-medium">
-                              {t('login.totp.enterCode')}
-                            </Label>
-                            <div className="relative">
-                              <Shield className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-dark-300" />
-                              <Input
-                                id="totp-code"
-                                type="text"
-                                inputMode="numeric"
-                                autoComplete="one-time-code"
-                                maxLength={8}
-                                value={totpCode}
-                                onChange={(e) => setTotpCode(e.target.value.replace(/\s/g, ''))}
-                                placeholder="000000"
-                                autoFocus
-                                className="pl-10 text-center font-mono tracking-widest text-lg"
-                              />
-                            </div>
-                          </div>
-                          <Button
-                            type="submit"
-                            className={cn(
-                              'w-full h-11 font-medium text-sm',
-                              'bg-gradient-to-r from-teal-600 to-cyan-600',
-                              'hover:from-teal-500 hover:to-cyan-500',
-                              'shadow-lg shadow-teal-900/20',
-                              'transition-all duration-200'
-                            )}
-                            disabled={totpCode.length < 6 || !backupCodesSaved}
-                          >
-                            <Shield className="w-4 h-4 mr-2" />
-                            {t('login.totp.confirmSetup')}
-                          </Button>
-                        </form>
-
-                        <div className="text-center">
-                          <button
-                            onClick={cancel2fa}
-                            className="text-xs text-dark-300 hover:text-red-400 transition-colors"
-                          >
-                            {t('login.totp.cancel')}
-                          </button>
-                        </div>
+                        <TotpCodeForm
+                          onSubmit={handleTotpVerify}
+                          totpCode={totpCode}
+                          onCodeChange={setTotpCode}
+                          disabled={totpCode.length < 6 || !backupCodesSaved}
+                          buttonLabel={t('login.totp.confirmSetup')}
+                          buttonIcon={Shield}
+                          onCancel={cancel2fa}
+                        />
                       </div>
                     )}
 
@@ -669,54 +707,16 @@ export default function Login() {
                           </p>
                         </div>
 
-                        <form onSubmit={handleTotpVerify} className="space-y-3">
-                          <div className="space-y-1">
-                            <Label htmlFor="totp-verify-code" className="text-dark-100 text-sm font-medium">
-                              {t('login.totp.enterCode')}
-                            </Label>
-                            <div className="relative">
-                              <Shield className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-dark-300" />
-                              <Input
-                                id="totp-verify-code"
-                                type="text"
-                                inputMode="numeric"
-                                autoComplete="one-time-code"
-                                maxLength={8}
-                                value={totpCode}
-                                onChange={(e) => setTotpCode(e.target.value.replace(/\s/g, ''))}
-                                placeholder="000000"
-                                autoFocus
-                                className="pl-10 text-center font-mono tracking-widest text-lg"
-                              />
-                            </div>
-                            <p className="text-[11px] text-dark-300">
-                              {t('login.totp.orBackupCode')}
-                            </p>
-                          </div>
-                          <Button
-                            type="submit"
-                            className={cn(
-                              'w-full h-11 font-medium text-sm',
-                              'bg-gradient-to-r from-teal-600 to-cyan-600',
-                              'hover:from-teal-500 hover:to-cyan-500',
-                              'shadow-lg shadow-teal-900/20',
-                              'transition-all duration-200'
-                            )}
-                            disabled={totpCode.length < 6}
-                          >
-                            <KeyRound className="w-4 h-4 mr-2" />
-                            {t('login.totp.verifyButton')}
-                          </Button>
-                        </form>
-
-                        <div className="text-center">
-                          <button
-                            onClick={cancel2fa}
-                            className="text-xs text-dark-300 hover:text-red-400 transition-colors"
-                          >
-                            {t('login.totp.cancel')}
-                          </button>
-                        </div>
+                        <TotpCodeForm
+                          onSubmit={handleTotpVerify}
+                          totpCode={totpCode}
+                          onCodeChange={setTotpCode}
+                          disabled={totpCode.length < 6}
+                          buttonLabel={t('login.totp.verifyButton')}
+                          buttonIcon={KeyRound}
+                          hint={t('login.totp.orBackupCode')}
+                          onCancel={cancel2fa}
+                        />
                       </div>
                     )}
                   </>

@@ -143,8 +143,8 @@ const TrafficBar = memo(function TrafficBar({ used, limit }: { used: number; lim
       {!isUnlimited && percent > 0 && (
         <div
           className={cn(
-            "absolute inset-y-0 left-0 rounded-full transition-all",
-            percent >= 90 ? 'bg-red-500/30' : percent >= 70 ? 'bg-yellow-500/30' : 'bg-primary-500/30'
+            "absolute inset-y-0 left-0 rounded-full transition-all duration-700 ease-out",
+            percent >= 90 ? 'bg-red-500/40' : percent >= 70 ? 'bg-yellow-500/35' : 'bg-primary-500/30'
           )}
           style={{ width: `${percent}%` }}
         />

@@ -295,6 +295,13 @@
   box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
 }
 
+/* Accessibility: focus-visible rings for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 /* Legacy component styles */
 @layer components {
   /* Card - diagonal gradient background with fadeIn animation */

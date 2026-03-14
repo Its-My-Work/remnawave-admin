@@ -608,7 +608,7 @@ function NodeCard({
           <div className="flex items-center gap-3">
             <div
               className={cn(
-                'p-2.5 rounded-lg',
+                'relative p-2.5 rounded-lg',
                 isOnline
                   ? 'bg-green-500/10'
                   : node.is_disabled
@@ -616,6 +616,9 @@ function NodeCard({
                     : 'bg-red-500/10'
               )}
             >
+              {isOnline && (
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-green-400 animate-pulse shadow-[0_0_6px_rgba(74,222,128,0.6)]" />
+              )}
               {isOnline ? (
                 <Activity className="w-6 h-6 text-green-400" />
               ) : (

@@ -489,12 +489,12 @@ function GrowthTrendsCard({
                 <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
                 <XAxis dataKey="date" stroke={chart.axis} fontSize={10} tickFormatter={(d) => { const p = d.split('-'); return `${p[2]}.${p[1]}` }} />
                 <YAxis stroke={chart.axis} fontSize={10} tickFormatter={(v) => metric === 'traffic' ? createFormatBytesShort(t)(v) : v} />
-                <RechartsTooltip content={({ active, payload, label }: { active?: boolean; payload?: TooltipPayloadEntry[]; label?: string }) => {
-                  if (!active || !payload?.length) return null
+                <RechartsTooltip content={(props: any) => {
+                  if (!props.active || !props.payload?.length) return null
                   return (
                     <div style={chart.tooltipStyle} className="px-3 py-2">
-                      <p className={cn("text-xs mb-1", chart.tooltipMutedClass)}>{label}</p>
-                      {payload.map((entry, i) => (
+                      <p className={cn("text-xs mb-1", chart.tooltipMutedClass)}>{props.label}</p>
+                      {props.payload.map((entry: any, i: number) => (
                         <p key={i} className="text-xs" style={{ color: entry.color }}>
                           {entry.name}: {formatValue(entry.value)}
                         </p>
@@ -1607,13 +1607,13 @@ export default function Dashboard() {
   // ── Chart data ───────────────────────────────────────────────
 
   // Traffic chart data
-  const trafficChartData = timeseries?.points?.map((p) => ({
+  const trafficChartData = (Array.isArray(timeseries?.points) ? timeseries.points : []).map((p) => ({
     name: formatTimestamp(p.timestamp),
     value: p.value,
   })) || []
 
   // Per-node traffic chart data (for stacked area)
-  const nodeTrafficChartData = timeseries?.node_points?.map((p) => ({
+  const nodeTrafficChartData = (Array.isArray(timeseries?.node_points) ? timeseries.node_points : []).map((p) => ({
     name: formatTimestamp(p.timestamp),
     ...p.nodes,
   })) || []

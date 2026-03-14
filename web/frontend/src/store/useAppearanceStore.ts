@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 
@@ -5,7 +6,7 @@ export type UIDensity = 'compact' | 'comfortable' | 'spacious'
 export type BorderRadius = 'sharp' | 'default' | 'rounded'
 export type FontSize = 'small' | 'default' | 'large'
 export type ThemePreset = 'obsidian' | 'arctic' | 'sakura' | 'twilight' | 'ember'
-export type ColorMode = 'dark' | 'light'
+export type ColorMode = 'dark' | 'light' | 'auto'
 
 interface AppearanceState {
   // Settings
@@ -53,7 +54,9 @@ export const useAppearanceStore = create<AppearanceState>()(
       setAnimationsEnabled: (animationsEnabled) => set({ animationsEnabled }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
-      toggleColorMode: () => set((s) => ({ colorMode: s.colorMode === 'dark' ? 'light' : 'dark' })),
+      toggleColorMode: () => set((s) => ({
+        colorMode: s.colorMode === 'dark' ? 'light' : s.colorMode === 'light' ? 'auto' : 'dark',
+      })),
       resetToDefaults: () => set(defaults),
     }),
     {
@@ -71,3 +74,28 @@ export const useAppearanceStore = create<AppearanceState>()(
     }
   )
 )
+
+function getSystemPreference(): 'dark' | 'light' {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+export function useResolvedColorMode(): 'dark' | 'light' {
+  const colorMode = useAppearanceStore((s) => s.colorMode)
+  const [resolved, setResolved] = useState<'dark' | 'light'>(
+    colorMode === 'auto' ? getSystemPreference() : colorMode
+  )
+
+  useEffect(() => {
+    if (colorMode !== 'auto') {
+      setResolved(colorMode)
+      return
+    }
+    setResolved(getSystemPreference())
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = (e: MediaQueryListEvent) => setResolved(e.matches ? 'dark' : 'light')
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [colorMode])
+
+  return resolved
+}
