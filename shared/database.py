@@ -2399,6 +2399,23 @@ class DatabaseService:
             )
             return [dict(r) for r in rows]
 
+    async def get_raw_traffic_sums(self) -> Dict[str, int]:
+        """Get sum of raw traffic (without multipliers) per user from user_node_traffic table.
+
+        Returns dict mapping user_uuid -> total raw traffic bytes.
+        """
+        if not self.is_connected:
+            return {}
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT user_uuid::text, SUM(traffic_bytes) as total_raw_bytes
+                FROM user_node_traffic
+                GROUP BY user_uuid
+                """
+            )
+            return {r["user_uuid"]: int(r["total_raw_bytes"]) for r in rows}
+
     # ==================== API Tokens Methods ====================
     
     async def upsert_token(self, data: Dict[str, Any]) -> bool:

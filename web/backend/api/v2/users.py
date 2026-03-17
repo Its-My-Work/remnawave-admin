@@ -133,7 +133,7 @@ async def list_users(
         # Normalize all users to have snake_case keys
         users = [_ensure_snake_case(u) for u in users]
 
-        # Enrich with HWID device counts from local DB (single query, no API calls)
+        # Enrich with HWID device counts and raw traffic from local DB (single query each, no API calls)
         try:
             from shared.database import db_service
             if db_service.is_connected:
@@ -145,6 +145,19 @@ async def list_users(
                             u['hwid_device_count'] = device_counts[uid]
         except Exception as e:
             logger.debug("Failed to enrich hwid device counts: %s", e)
+
+        # Enrich with raw traffic (without node multipliers) from user_node_traffic
+        try:
+            from shared.database import db_service
+            if db_service.is_connected:
+                raw_traffic = await db_service.get_raw_traffic_sums()
+                if raw_traffic:
+                    for u in users:
+                        uid = u.get('uuid')
+                        if uid and uid in raw_traffic:
+                            u['raw_used_traffic_bytes'] = raw_traffic[uid]
+        except Exception as e:
+            logger.debug("Failed to enrich raw traffic: %s", e)
 
         now = datetime.now(timezone.utc)
 
@@ -251,6 +264,8 @@ async def list_users(
 
         if sort_by == 'used_traffic_bytes':
             users.sort(key=lambda x: x.get('used_traffic_bytes', 0) or 0, reverse=reverse)
+        elif sort_by == 'raw_used_traffic_bytes':
+            users.sort(key=lambda x: x.get('raw_used_traffic_bytes', 0) or 0, reverse=reverse)
         elif sort_by == 'lifetime_used_traffic_bytes':
             users.sort(key=lambda x: x.get('lifetime_used_traffic_bytes', 0) or 0, reverse=reverse)
         elif sort_by == 'traffic_limit_bytes':

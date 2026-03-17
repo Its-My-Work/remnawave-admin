@@ -62,6 +62,7 @@ interface UserListItem {
   traffic_limit_strategy: string | null
   used_traffic_bytes: number
   lifetime_used_traffic_bytes: number
+  raw_used_traffic_bytes: number | null
   hwid_device_limit: number
   hwid_device_count: number
   external_squad_uuid: string | null
@@ -728,7 +729,7 @@ function CreateUserModal({
 
 export default function Users() {
   const { t } = useTranslation()
-  const { formatDateShort, formatNumber } = useFormatters()
+  const { formatDateShort, formatNumber, formatBytes } = useFormatters()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const canCreate = useHasPermission('users', 'create')
@@ -769,6 +770,7 @@ export default function Users() {
       status: u.status,
       email: u.email || '',
       traffic_used: formatBytesForExport(u.used_traffic_bytes),
+      traffic_raw: u.raw_used_traffic_bytes != null ? formatBytesForExport(u.raw_used_traffic_bytes) : '',
       traffic_limit: u.traffic_limit_bytes ? formatBytesForExport(u.traffic_limit_bytes) : t('users.unlimited'),
       hwid_count: u.hwid_device_count ?? 0,
       hwid_limit: u.hwid_device_limit ?? 0,
@@ -1057,6 +1059,7 @@ export default function Users() {
                     <SelectContent>
                       <SelectItem value="created_at">{t('users.sort.createdAt')}</SelectItem>
                       <SelectItem value="used_traffic_bytes">{t('users.sort.trafficCurrent')}</SelectItem>
+                      <SelectItem value="raw_used_traffic_bytes">{t('users.sort.trafficRaw')}</SelectItem>
                       <SelectItem value="lifetime_used_traffic_bytes">{t('users.sort.trafficLifetime')}</SelectItem>
                       <SelectItem value="hwid_device_limit">{t('users.sort.hwidDevices')}</SelectItem>
                       <SelectItem value="online_at">{t('users.sort.lastActivity')}</SelectItem>
@@ -1451,6 +1454,11 @@ export default function Users() {
                         </td>
                         <td className="min-w-[140px]">
                           <TrafficBar used={user.used_traffic_bytes} limit={user.traffic_limit_bytes} />
+                          {user.raw_used_traffic_bytes != null && user.raw_used_traffic_bytes !== user.used_traffic_bytes && (
+                            <div className="text-[10px] text-dark-300 mt-0.5 text-center" title={t('users.table.rawTrafficHint')}>
+                              {t('users.table.rawTrafficPrefix')}{formatBytes(user.raw_used_traffic_bytes)}
+                            </div>
+                          )}
                         </td>
                         <td className="text-center">
                           <span className="text-dark-100 text-sm">{user.hwid_device_count} / {user.hwid_device_limit || '\u221E'}</span>
