@@ -492,12 +492,15 @@ function TrafficChartTooltip({ active, payload, label }: { active?: boolean; pay
   const chart = useChartTheme()
   const formatBytesLocal = createFormatBytes(t)
   if (!active || !payload?.length) return null
+  // Sort by value descending for readability; keep original color from stroke
+  const sorted = [...payload].sort((a, b) => (b.value || 0) - (a.value || 0))
   return (
     <div style={chart.tooltipStyle} className="px-3 py-2">
       <p className={cn("text-xs mb-1", chart.tooltipMutedClass)}>{label}</p>
-      {payload.map((entry, i) => (
-        <p key={i} className="text-xs" style={{ color: entry.color }}>
-          {entry.name}: {formatBytesLocal(entry.value)}
+      {sorted.map((entry, i) => (
+        <p key={i} className="text-xs flex items-center gap-1.5">
+          <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
+          <span style={{ color: entry.color }}>{entry.name}: {formatBytesLocal(entry.value)}</span>
         </p>
       ))}
     </div>
