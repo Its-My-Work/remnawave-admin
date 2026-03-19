@@ -216,6 +216,21 @@ export const advancedAnalyticsApi = {
     const { data } = await client.get('/analytics/advanced/torrent-stats', { params: { days } })
     return data
   },
+
+  cohortMatrix: async (granularity = 'week', months = 3): Promise<CohortMatrixData> => {
+    const { data } = await client.get('/analytics/advanced/cohort-matrix', { params: { granularity, months } })
+    return data
+  },
+
+  churn: async (period = 'month', months = 6): Promise<ChurnData> => {
+    const { data } = await client.get('/analytics/advanced/churn', { params: { period, months } })
+    return data
+  },
+
+  ltv: async (): Promise<LtvData> => {
+    const { data } = await client.get('/analytics/advanced/ltv')
+    return data
+  },
 }
 
 export interface NodeMetricsHistoryItem {
@@ -239,6 +254,34 @@ export interface NodeMetricsHistoryResponse {
   nodes: NodeMetricsHistoryItem[]
   timeseries: NodeMetricsTimeseriesPoint[]
   node_names: Record<string, string>
+}
+
+export interface CohortMatrixData {
+  cohorts: {
+    cohort: string
+    total_users: number
+    periods: Record<string, { active_users: number; retention_percent: number }>
+  }[]
+  periods: string[]
+  granularity: string
+}
+
+export interface ChurnData {
+  series: {
+    period: string
+    active_users: number
+    new_users: number
+    churned_users: number
+    churn_rate: number
+  }[]
+  avg_churn: number
+  period: string
+}
+
+export interface LtvData {
+  avg_lifetime_days: number
+  sample_size: number
+  estimated_ltv: number
 }
 
 export interface TorrentStatsResponse {

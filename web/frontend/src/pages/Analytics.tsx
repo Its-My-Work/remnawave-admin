@@ -1836,7 +1836,7 @@ function RetentionCard() {
               {t('analytics.retention.title', { defaultValue: 'Retention Analysis' })}
             </CardTitle>
             <InfoTooltip
-              text={t('analytics.retention.tooltip', { defaultValue: 'Weekly cohort retention: how many users registered each week remain active' })}
+              text={t('analytics.retention.tooltip', { defaultValue: 'Когортный анализ удержания: показывает какой % пользователей, зарегистрированных в каждую неделю, до сих пор активен. Retention — текущий статус ACTIVE. With Traffic — хотя бы раз использовали трафик. Active Sub — подписка ещё не истекла.' })}
               side="right"
             />
           </div>
@@ -1916,12 +1916,30 @@ function RetentionCard() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-xs">{t('analytics.retention.week', { defaultValue: 'Week' })}</TableHead>
-                  <TableHead className="text-xs text-right">{t('analytics.retention.total', { defaultValue: 'Total' })}</TableHead>
-                  <TableHead className="text-xs text-right">{t('analytics.retention.active', { defaultValue: 'Active' })}</TableHead>
-                  <TableHead className="text-xs text-center">{t('analytics.retention.retentionPct', { defaultValue: 'Retention' })}</TableHead>
-                  <TableHead className="text-xs text-center">{t('analytics.retention.trafficPct', { defaultValue: 'With Traffic' })}</TableHead>
-                  <TableHead className="text-xs text-center">{t('analytics.retention.subPct', { defaultValue: 'Active Sub' })}</TableHead>
+                  <TableHead className="text-xs">
+                    {t('analytics.retention.week', { defaultValue: 'Week' })}
+                    <span className="block text-[10px] text-muted-foreground font-normal">Неделя регистрации</span>
+                  </TableHead>
+                  <TableHead className="text-xs text-right">
+                    {t('analytics.retention.total', { defaultValue: 'Total' })}
+                    <span className="block text-[10px] text-muted-foreground font-normal">Зарегистрировано</span>
+                  </TableHead>
+                  <TableHead className="text-xs text-right">
+                    {t('analytics.retention.active', { defaultValue: 'Active' })}
+                    <span className="block text-[10px] text-muted-foreground font-normal">Сейчас активны</span>
+                  </TableHead>
+                  <TableHead className="text-xs text-center">
+                    {t('analytics.retention.retentionPct', { defaultValue: 'Retention' })}
+                    <span className="block text-[10px] text-muted-foreground font-normal">% со статусом ACTIVE</span>
+                  </TableHead>
+                  <TableHead className="text-xs text-center">
+                    {t('analytics.retention.trafficPct', { defaultValue: 'With Traffic' })}
+                    <span className="block text-[10px] text-muted-foreground font-normal">% использовали трафик</span>
+                  </TableHead>
+                  <TableHead className="text-xs text-center">
+                    {t('analytics.retention.subPct', { defaultValue: 'Active Sub' })}
+                    <span className="block text-[10px] text-muted-foreground font-normal">% с активной подпиской</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1955,6 +1973,217 @@ function RetentionCard() {
     </Card>
   )
 }
+
+// ── Churn Rate ──────────────────────────────────────────────────
+
+function ChurnCard() {
+  const { t } = useTranslation()
+  const chartTheme = useChartTheme()
+  const [period, setPeriod] = useState('month')
+  const [months, setMonths] = useState('6')
+
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['advanced-churn', period, months],
+    queryFn: () => advancedAnalyticsApi.churn(period, parseInt(months, 10)),
+    refetchInterval: 120_000,
+  })
+
+  const series = Array.isArray(data?.series) ? data!.series : []
+  const avgChurn = data?.avg_churn ?? 0
+
+  return (
+    <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-red-400" />
+            <CardTitle className="text-base">
+              {t('analytics.churn.title', { defaultValue: 'Churn Rate' })}
+            </CardTitle>
+            <InfoTooltip
+              text={t('analytics.churn.tooltip', { defaultValue: 'Отток пользователей: показывает сколько активных пользователей перестали подключаться в каждом периоде. Churn = (предыдущие активные + новые - текущие активные) / предыдущие активные. Чем ниже — тем лучше.' })}
+              side="right"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={period} onValueChange={setPeriod}>
+              <SelectTrigger className="w-[100px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="week">{t('analytics.churn.weekly', { defaultValue: 'Weekly' })}</SelectItem>
+                <SelectItem value="month">{t('analytics.churn.monthly', { defaultValue: 'Monthly' })}</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={months} onValueChange={setMonths}>
+              <SelectTrigger className="w-[90px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="3">3 {t('analytics.churn.months', { defaultValue: 'mo' })}</SelectItem>
+                <SelectItem value="6">6 {t('analytics.churn.months', { defaultValue: 'mo' })}</SelectItem>
+                <SelectItem value="12">12 {t('analytics.churn.months', { defaultValue: 'mo' })}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {/* Average churn badge */}
+        <div className="flex flex-wrap gap-3 mb-4">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--glass-bg-hover)]/30 border border-[var(--glass-border)]">
+            <span className="text-xs text-muted-foreground">{t('analytics.churn.avgChurn', { defaultValue: 'Avg Churn' })}:</span>
+            <span className={cn('text-sm font-medium', avgChurn <= 10 ? 'text-green-400' : avgChurn <= 25 ? 'text-yellow-400' : 'text-red-400')}>
+              {avgChurn}%
+            </span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--glass-bg-hover)]/30 border border-[var(--glass-border)]">
+            <span className="text-xs text-muted-foreground">{t('analytics.churn.periods', { defaultValue: 'Periods' })}:</span>
+            <span className="text-sm font-medium text-white">{series.length}</span>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <Skeleton className="h-64 w-full" />
+        ) : isError ? (
+          <QueryError onRetry={refetch} />
+        ) : series.length === 0 ? (
+          <div className="h-48 flex items-center justify-center text-muted-foreground">
+            <p>{t('analytics.churn.noData', { defaultValue: 'No churn data' })}</p>
+          </div>
+        ) : (
+          <>
+            {/* Chart */}
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={series}>
+                <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+                <XAxis dataKey="period" tick={{ fill: chartTheme.tick, fontSize: 11 }} />
+                <YAxis tick={{ fill: chartTheme.tick, fontSize: 11 }} />
+                <RechartsTooltip contentStyle={chartTheme.tooltipStyle} />
+                <Area type="monotone" dataKey="active_users" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.15} name="Active" />
+                <Area type="monotone" dataKey="churned_users" stroke="#ef4444" fill="#ef4444" fillOpacity={0.2} name="Churned" />
+                <Area type="monotone" dataKey="new_users" stroke="#10b981" fill="#10b981" fillOpacity={0.1} name="New" />
+                <Legend />
+              </AreaChart>
+            </ResponsiveContainer>
+
+            {/* Table */}
+            <div className="overflow-x-auto mt-4">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs">
+                      {t('analytics.churn.period', { defaultValue: 'Period' })}
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      Active
+                      <span className="block text-[10px] text-muted-foreground font-normal">Подключались в период</span>
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      New
+                      <span className="block text-[10px] text-muted-foreground font-normal">Зарегистрировались</span>
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      Churned
+                      <span className="block text-[10px] text-muted-foreground font-normal">Перестали подключаться</span>
+                    </TableHead>
+                    <TableHead className="text-xs text-center">
+                      Churn %
+                      <span className="block text-[10px] text-muted-foreground font-normal">% оттока</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {series.map((row) => (
+                    <TableRow key={row.period}>
+                      <TableCell className="text-sm font-mono text-white">{row.period}</TableCell>
+                      <TableCell className="text-sm text-right">{row.active_users.toLocaleString()}</TableCell>
+                      <TableCell className="text-sm text-right text-green-400">+{row.new_users.toLocaleString()}</TableCell>
+                      <TableCell className="text-sm text-right text-red-400">{row.churned_users > 0 ? `-${row.churned_users.toLocaleString()}` : '0'}</TableCell>
+                      <TableCell className="text-center">
+                        <span className={cn('inline-block px-2 py-0.5 rounded text-xs font-medium',
+                          row.churn_rate <= 10 ? 'bg-green-500/20 text-green-400' :
+                          row.churn_rate <= 25 ? 'bg-yellow-500/20 text-yellow-400' :
+                          'bg-red-500/20 text-red-400'
+                        )}>
+                          {row.churn_rate}%
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+
+// ── LTV Estimate ────────────────────────────────────────────────
+
+function LtvCard() {
+  const { t } = useTranslation()
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['advanced-ltv'],
+    queryFn: () => advancedAnalyticsApi.ltv(),
+    refetchInterval: 300_000,
+  })
+
+  const avgDays = data?.avg_lifetime_days ?? 0
+  const ltv = data?.estimated_ltv ?? 0
+  const sampleSize = data?.sample_size ?? 0
+
+  return (
+    <Card className="animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
+      <CardHeader className="pb-2">
+        <div className="flex items-center gap-2">
+          <Activity className="w-5 h-5 text-primary-400" />
+          <CardTitle className="text-base">
+            {t('analytics.ltv.title', { defaultValue: 'User Lifetime Value' })}
+          </CardTitle>
+          <InfoTooltip
+            text={t('analytics.ltv.tooltip', { defaultValue: 'Оценка времени жизни пользователя: среднее количество дней между регистрацией и последней активностью. LTV = средний срок жизни × стоимость содержания на пользователя в месяц. Данные за последние 6 месяцев.' })}
+            side="right"
+          />
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-20 w-full" />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="flex flex-col items-center gap-1 p-4 rounded-lg bg-[var(--glass-bg-hover)]/30 border border-[var(--glass-border)]">
+              <span className="text-2xl font-bold text-white">{avgDays.toFixed(0)}</span>
+              <span className="text-xs text-muted-foreground text-center">
+                {t('analytics.ltv.avgLifetime', { defaultValue: 'Avg Lifetime (days)' })}
+              </span>
+              <span className="text-[10px] text-muted-foreground">Среднее время от регистрации до последнего подключения</span>
+            </div>
+            <div className="flex flex-col items-center gap-1 p-4 rounded-lg bg-[var(--glass-bg-hover)]/30 border border-[var(--glass-border)]">
+              <span className="text-2xl font-bold text-primary-400">${ltv.toFixed(2)}</span>
+              <span className="text-xs text-muted-foreground text-center">
+                {t('analytics.ltv.estimatedLtv', { defaultValue: 'Estimated LTV' })}
+              </span>
+              <span className="text-[10px] text-muted-foreground">Затраты на пользователя за всё время</span>
+            </div>
+            <div className="flex flex-col items-center gap-1 p-4 rounded-lg bg-[var(--glass-bg-hover)]/30 border border-[var(--glass-border)]">
+              <span className="text-2xl font-bold text-white">{sampleSize.toLocaleString()}</span>
+              <span className="text-xs text-muted-foreground text-center">
+                {t('analytics.ltv.sampleSize', { defaultValue: 'Sample Size' })}
+              </span>
+              <span className="text-[10px] text-muted-foreground">Пользователей с активностью за 6 мес</span>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 
 // ── Torrent / P2P Analytics ──────────────────────────────────────
 
@@ -2182,8 +2411,10 @@ export default function Analytics() {
           <TorrentAnalyticsCard />
         </TabsContent>
 
-        <TabsContent value="retention">
+        <TabsContent value="retention" className="space-y-4">
           <RetentionCard />
+          <ChurnCard />
+          <LtvCard />
         </TabsContent>
       </Tabs>
     </div>

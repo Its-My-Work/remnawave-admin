@@ -346,7 +346,7 @@ async def export_full_config(
 
         # Scripts
         rows = await conn.fetch(
-            "SELECT id, name, display_name, description, category, content, "
+            "SELECT id, name, display_name, description, category, script_content, "
             "timeout_seconds, requires_root, is_builtin, source_url "
             "FROM node_scripts ORDER BY id"
         )
@@ -483,20 +483,20 @@ async def import_full_config(
                         continue
                     if existing and strategy == "overwrite":
                         await conn.execute(
-                            "UPDATE node_scripts SET content = $2, description = $3, "
+                            "UPDATE node_scripts SET script_content = $2, description = $3, "
                             "display_name = $4, category = $5, timeout_seconds = $6, "
                             "requires_root = $7 WHERE name = $1",
-                            name, s.get("content", ""), s.get("description"),
+                            name, s.get("script_content", s.get("content", "")), s.get("description"),
                             s.get("display_name"), s.get("category"),
                             s.get("timeout_seconds", 300), s.get("requires_root", False),
                         )
                     else:
                         await conn.execute(
                             "INSERT INTO node_scripts (name, display_name, description, category, "
-                            "content, timeout_seconds, requires_root, is_builtin) "
+                            "script_content, timeout_seconds, requires_root, is_builtin) "
                             "VALUES ($1, $2, $3, $4, $5, $6, $7, false) ON CONFLICT DO NOTHING",
                             name, s.get("display_name"), s.get("description"),
-                            s.get("category"), s.get("content", ""),
+                            s.get("category"), s.get("script_content", s.get("content", "")),
                             s.get("timeout_seconds", 300), s.get("requires_root", False),
                         )
                     imported += 1

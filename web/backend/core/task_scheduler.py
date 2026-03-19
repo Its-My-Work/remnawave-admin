@@ -23,7 +23,7 @@ async def task_scheduler_loop():
                 tasks = await conn.fetch(
                     """
                     SELECT st.id, st.script_id, st.node_uuid::text, st.cron_expression,
-                           st.env_vars, ns.content AS script_content, ns.name AS script_name,
+                           st.env_vars, ns.script_content, ns.name AS script_name,
                            ns.timeout_seconds, ns.requires_root
                     FROM scheduled_tasks st
                     JOIN node_scripts ns ON ns.id = st.script_id
