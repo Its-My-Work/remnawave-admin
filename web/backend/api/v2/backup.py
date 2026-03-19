@@ -305,3 +305,235 @@ async def _log_backup(
             )
     except Exception as e:
         logger.warning("Failed to log backup operation: %s", e)
+
+
+# ══════════════════════════════════════════════════════════════════
+# Full Config Export / Import
+# ══════════════════════════════════════════════════════════════════
+
+
+@router.post("/export-full-config")
+async def export_full_config(
+    admin: AdminUser = Depends(require_permission("backups", "create")),
+):
+    """Export all configuration as single JSON: roles, permissions, automation rules,
+    alert rules, scripts, settings, notification channels, scheduled tasks."""
+    import json as _json
+    from datetime import datetime, timezone
+    from shared.database import db_service
+
+    if not db_service.is_connected:
+        raise api_error(503, E.DB_UNAVAILABLE)
+
+    sections = {}
+
+    async with db_service.acquire() as conn:
+        # Roles
+        rows = await conn.fetch("SELECT * FROM roles ORDER BY id")
+        sections["roles"] = [dict(r) for r in rows]
+
+        # Permissions
+        rows = await conn.fetch("SELECT * FROM admin_permissions ORDER BY role_id, resource")
+        sections["permissions"] = [dict(r) for r in rows]
+
+        # Automation rules
+        rows = await conn.fetch("SELECT * FROM automation_rules ORDER BY id")
+        sections["automation_rules"] = [dict(r) for r in rows]
+
+        # Alert rules
+        rows = await conn.fetch("SELECT * FROM alert_rules ORDER BY id")
+        sections["alert_rules"] = [dict(r) for r in rows]
+
+        # Scripts
+        rows = await conn.fetch(
+            "SELECT id, name, display_name, description, category, content, "
+            "timeout_seconds, requires_root, is_builtin, source_url "
+            "FROM node_scripts ORDER BY id"
+        )
+        sections["scripts"] = [dict(r) for r in rows]
+
+        # Settings
+        rows = await conn.fetch("SELECT key, value, category FROM settings ORDER BY key")
+        sections["settings"] = [dict(r) for r in rows]
+
+        # Notification channels (mask secrets)
+        rows = await conn.fetch("SELECT * FROM notification_channel_configs ORDER BY id")
+        channels = []
+        for r in rows:
+            d = dict(r)
+            config = d.get("config")
+            if isinstance(config, dict):
+                for secret_key in ("webhook_url", "bot_token", "password", "api_key"):
+                    if secret_key in config and config[secret_key]:
+                        config[secret_key] = "***REDACTED***"
+            channels.append(d)
+        sections["notification_channels"] = channels
+
+        # Scheduled tasks
+        try:
+            rows = await conn.fetch("SELECT * FROM scheduled_tasks ORDER BY id")
+            sections["scheduled_tasks"] = [dict(r) for r in rows]
+        except Exception:
+            sections["scheduled_tasks"] = []
+
+    # Serialize
+    def _default(obj):
+        if hasattr(obj, "isoformat"):
+            return obj.isoformat()
+        if isinstance(obj, (set, frozenset)):
+            return list(obj)
+        return str(obj)
+
+    export_data = {
+        "version": "2.8.0",
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "exported_by": admin.username,
+        "sections": sections,
+    }
+
+    return export_data
+
+
+class ImportConfigRequest(BaseModel):
+    config: dict
+    strategy: str = "skip"  # skip, overwrite
+    sections: Optional[List[str]] = None  # None = all
+
+
+@router.post("/import-full-config")
+async def import_full_config(
+    body: ImportConfigRequest,
+    admin: AdminUser = Depends(require_permission("backups", "create")),
+):
+    """Import configuration from exported JSON. Strategy: skip (don't touch existing), overwrite."""
+    from shared.database import db_service
+
+    if not db_service.is_connected:
+        raise api_error(503, E.DB_UNAVAILABLE)
+
+    config = body.config
+    strategy = body.strategy
+    selected = set(body.sections) if body.sections else None
+
+    if "sections" not in config:
+        raise api_error(400, "INVALID_FORMAT", "Missing 'sections' key in config")
+
+    sections = config["sections"]
+    result = {"imported": {}, "skipped": {}, "errors": []}
+
+    async with db_service.acquire() as conn:
+        async with conn.transaction():
+            # Settings
+            if "settings" in sections and (not selected or "settings" in selected):
+                imported, skipped = 0, 0
+                for s in sections["settings"]:
+                    key = s.get("key")
+                    value = s.get("value")
+                    if not key:
+                        continue
+                    existing = await conn.fetchrow("SELECT key FROM settings WHERE key = $1", key)
+                    if existing and strategy == "skip":
+                        skipped += 1
+                        continue
+                    await conn.execute(
+                        "INSERT INTO settings (key, value, category) VALUES ($1, $2, $3) "
+                        "ON CONFLICT (key) DO UPDATE SET value = $2",
+                        key, value, s.get("category", "general"),
+                    )
+                    imported += 1
+                result["imported"]["settings"] = imported
+                result["skipped"]["settings"] = skipped
+
+            # Roles
+            if "roles" in sections and (not selected or "roles" in selected):
+                imported, skipped = 0, 0
+                for r in sections["roles"]:
+                    name = r.get("name")
+                    if not name:
+                        continue
+                    existing = await conn.fetchrow("SELECT id FROM roles WHERE name = $1", name)
+                    if existing and strategy == "skip":
+                        skipped += 1
+                        continue
+                    if existing and strategy == "overwrite":
+                        await conn.execute(
+                            "UPDATE roles SET description = $2, is_system = $3 WHERE name = $1",
+                            name, r.get("description"), r.get("is_system", False),
+                        )
+                    else:
+                        await conn.execute(
+                            "INSERT INTO roles (name, description, is_system) VALUES ($1, $2, $3) "
+                            "ON CONFLICT (name) DO NOTHING",
+                            name, r.get("description"), r.get("is_system", False),
+                        )
+                    imported += 1
+                result["imported"]["roles"] = imported
+                result["skipped"]["roles"] = skipped
+
+            # Scripts
+            if "scripts" in sections and (not selected or "scripts" in selected):
+                imported, skipped = 0, 0
+                for s in sections["scripts"]:
+                    name = s.get("name")
+                    if not name:
+                        continue
+                    existing = await conn.fetchrow("SELECT id FROM node_scripts WHERE name = $1", name)
+                    if existing and strategy == "skip":
+                        skipped += 1
+                        continue
+                    if existing and strategy == "overwrite":
+                        await conn.execute(
+                            "UPDATE node_scripts SET content = $2, description = $3, "
+                            "display_name = $4, category = $5, timeout_seconds = $6, "
+                            "requires_root = $7 WHERE name = $1",
+                            name, s.get("content", ""), s.get("description"),
+                            s.get("display_name"), s.get("category"),
+                            s.get("timeout_seconds", 300), s.get("requires_root", False),
+                        )
+                    else:
+                        await conn.execute(
+                            "INSERT INTO node_scripts (name, display_name, description, category, "
+                            "content, timeout_seconds, requires_root, is_builtin) "
+                            "VALUES ($1, $2, $3, $4, $5, $6, $7, false) ON CONFLICT DO NOTHING",
+                            name, s.get("display_name"), s.get("description"),
+                            s.get("category"), s.get("content", ""),
+                            s.get("timeout_seconds", 300), s.get("requires_root", False),
+                        )
+                    imported += 1
+                result["imported"]["scripts"] = imported
+                result["skipped"]["scripts"] = skipped
+
+            # Alert rules
+            if "alert_rules" in sections and (not selected or "alert_rules" in selected):
+                imported, skipped = 0, 0
+                for r in sections["alert_rules"]:
+                    name = r.get("name")
+                    if not name:
+                        continue
+                    existing = await conn.fetchrow("SELECT id FROM alert_rules WHERE name = $1", name)
+                    if existing and strategy == "skip":
+                        skipped += 1
+                        continue
+                    if existing and strategy == "overwrite":
+                        await conn.execute("DELETE FROM alert_rules WHERE name = $1", name)
+                    import json as _json
+                    channels = r.get("channels", ["in_app"])
+                    if isinstance(channels, list):
+                        channels = _json.dumps(channels)
+                    await conn.execute(
+                        "INSERT INTO alert_rules (name, description, is_enabled, rule_type, "
+                        "metric, operator, threshold, duration_minutes, channels, severity, "
+                        "cooldown_minutes, group_key, title_template, body_template) "
+                        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14)",
+                        name, r.get("description"), r.get("is_enabled", True),
+                        r.get("rule_type", "threshold"), r.get("metric"), r.get("operator"),
+                        r.get("threshold"), r.get("duration_minutes", 0),
+                        channels if isinstance(channels, str) else _json.dumps(channels),
+                        r.get("severity", "warning"), r.get("cooldown_minutes", 30),
+                        r.get("group_key"), r.get("title_template"), r.get("body_template"),
+                    )
+                    imported += 1
+                result["imported"]["alert_rules"] = imported
+                result["skipped"]["alert_rules"] = skipped
+
+    return result

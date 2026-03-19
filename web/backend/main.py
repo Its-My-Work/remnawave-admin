@@ -461,6 +461,10 @@ async def lifespan(app: FastAPI):
                 # Dashboard WS publisher — pushes stats to subscribed clients
                 from web.backend.api.v2.websocket import dashboard_publisher_loop
                 _bg_tasks.append(asyncio.create_task(dashboard_publisher_loop()))
+
+                # Scheduled tasks (cron) — executes scripts on nodes by schedule
+                from web.backend.core.task_scheduler import task_scheduler_loop
+                _bg_tasks.append(asyncio.create_task(task_scheduler_loop()))
             else:
                 logger.warning("Database connection failed")
         except Exception as e:

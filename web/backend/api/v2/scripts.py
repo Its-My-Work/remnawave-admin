@@ -3,15 +3,17 @@
 CRUD for scripts + execution on nodes via Agent v2 WebSocket.
 Import from GitHub URLs and repositories.
 """
+import json
 import logging
 import re
+from datetime import datetime
 from typing import List, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from web.backend.core.errors import api_error, E
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from web.backend.api.deps import AdminUser, require_permission
 from web.backend.core.agent_manager import agent_manager
@@ -589,3 +591,186 @@ async def bulk_import_scripts(
             errors.append(f"{item.name}: {e}")
 
     return BulkImportResponse(imported=imported, errors=errors)
+
+
+# ══════════════════════════════════════════════════════════════════
+# Scheduled Tasks (Cron)
+# ══════════════════════════════════════════════════════════════════
+
+
+class ScheduledTaskCreate(BaseModel):
+    script_id: int
+    node_uuid: str
+    cron_expression: str
+    is_enabled: bool = True
+    env_vars: dict = {}
+
+
+class ScheduledTaskUpdate(BaseModel):
+    cron_expression: Optional[str] = None
+    is_enabled: Optional[bool] = None
+    env_vars: Optional[dict] = None
+
+
+class ScheduledTaskItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: int
+    script_id: int
+    node_uuid: str
+    cron_expression: str
+    is_enabled: bool = True
+    env_vars: Optional[dict] = None
+    last_run_at: Optional[datetime] = None
+    last_status: Optional[str] = None
+    next_run_at: Optional[datetime] = None
+    run_count: int = 0
+    created_by: Optional[int] = None
+    created_at: Optional[datetime] = None
+    # Joined fields
+    script_name: Optional[str] = None
+    node_name: Optional[str] = None
+
+
+@router.get("/scheduled-tasks")
+async def list_scheduled_tasks(
+    admin: AdminUser = Depends(require_permission("fleet", "view")),
+):
+    """List all scheduled tasks with script and node names."""
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT st.*, ns.name AS script_name, n.name AS node_name
+            FROM scheduled_tasks st
+            LEFT JOIN node_scripts ns ON ns.id = st.script_id
+            LEFT JOIN nodes n ON n.uuid = st.node_uuid
+            ORDER BY st.created_at DESC
+            """
+        )
+    items = []
+    for r in rows:
+        d = dict(r)
+        if isinstance(d.get("env_vars"), str):
+            d["env_vars"] = json.loads(d["env_vars"])
+        items.append(ScheduledTaskItem(**d))
+    return {"items": items, "total": len(items)}
+
+
+@router.post("/scheduled-tasks", status_code=201)
+async def create_scheduled_task(
+    body: ScheduledTaskCreate,
+    admin: AdminUser = Depends(require_permission("fleet", "scripts")),
+):
+    """Create a new scheduled task."""
+    # Validate cron expression
+    from web.backend.core.automation_engine import cron_matches_now
+    try:
+        parts = body.cron_expression.strip().split()
+        if len(parts) != 5:
+            raise ValueError("Expected 5 parts")
+    except Exception:
+        raise api_error(400, "INVALID_CRON", "Invalid CRON expression, expected 5 fields: min hour dom month dow")
+
+    from shared.database import db_service
+    env_json = json.dumps(body.env_vars) if body.env_vars else "{}"
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO scheduled_tasks (script_id, node_uuid, cron_expression, is_enabled, env_vars, created_by)
+            VALUES ($1, $2::uuid, $3, $4, $5::jsonb, $6)
+            RETURNING *
+            """,
+            body.script_id, body.node_uuid, body.cron_expression,
+            body.is_enabled, env_json, admin.account_id,
+        )
+    d = dict(row)
+    if isinstance(d.get("env_vars"), str):
+        d["env_vars"] = json.loads(d["env_vars"])
+    return ScheduledTaskItem(**d)
+
+
+@router.patch("/scheduled-tasks/{task_id}")
+async def update_scheduled_task(
+    task_id: int,
+    body: ScheduledTaskUpdate,
+    admin: AdminUser = Depends(require_permission("fleet", "scripts")),
+):
+    """Update a scheduled task."""
+    from shared.database import db_service
+    updates = []
+    args = [task_id]
+    idx = 1
+
+    if body.cron_expression is not None:
+        parts = body.cron_expression.strip().split()
+        if len(parts) != 5:
+            raise api_error(400, "INVALID_CRON", "Invalid CRON expression")
+        idx += 1
+        updates.append(f"cron_expression = ${idx}")
+        args.append(body.cron_expression)
+
+    if body.is_enabled is not None:
+        idx += 1
+        updates.append(f"is_enabled = ${idx}")
+        args.append(body.is_enabled)
+
+    if body.env_vars is not None:
+        idx += 1
+        updates.append(f"env_vars = ${idx}::jsonb")
+        args.append(json.dumps(body.env_vars))
+
+    if not updates:
+        raise api_error(400, "NO_CHANGES")
+
+    updates.append("updated_at = NOW()")
+
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            f"UPDATE scheduled_tasks SET {', '.join(updates)} WHERE id = $1 RETURNING *",
+            *args,
+        )
+    if not row:
+        raise api_error(404, "NOT_FOUND")
+
+    d = dict(row)
+    if isinstance(d.get("env_vars"), str):
+        d["env_vars"] = json.loads(d["env_vars"])
+    return ScheduledTaskItem(**d)
+
+
+@router.delete("/scheduled-tasks/{task_id}")
+async def delete_scheduled_task(
+    task_id: int,
+    admin: AdminUser = Depends(require_permission("fleet", "scripts")),
+):
+    """Delete a scheduled task."""
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            "DELETE FROM scheduled_tasks WHERE id = $1 RETURNING id", task_id
+        )
+    if not row:
+        raise api_error(404, "NOT_FOUND")
+    return {"status": "ok"}
+
+
+@router.post("/scheduled-tasks/{task_id}/toggle")
+async def toggle_scheduled_task(
+    task_id: int,
+    admin: AdminUser = Depends(require_permission("fleet", "scripts")),
+):
+    """Toggle enabled/disabled."""
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            "UPDATE scheduled_tasks SET is_enabled = NOT is_enabled, updated_at = NOW() "
+            "WHERE id = $1 RETURNING *",
+            task_id,
+        )
+    if not row:
+        raise api_error(404, "NOT_FOUND")
+    d = dict(row)
+    if isinstance(d.get("env_vars"), str):
+        d["env_vars"] = json.loads(d["env_vars"])
+    return ScheduledTaskItem(**d)

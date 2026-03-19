@@ -916,3 +916,165 @@ async def get_ltv_estimate(
     except Exception as e:
         logger.error("LTV estimate failed: %s", e)
         return {"avg_lifetime_days": 0, "sample_size": 0, "estimated_ltv": 0}
+
+
+# ══════════════════════════════════════════════════════════════════
+# Geo-Balancing Recommendations
+# ══════════════════════════════════════════════════════════════════
+
+
+@router.get("/geo-balance")
+@limiter.limit(RATE_ANALYTICS)
+async def get_geo_balance(
+    request: Request,
+    days: int = Query(7, ge=1, le=90),
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Geo-balancing analysis: node load distribution and recommendations."""
+    return await _compute_geo_balance(days=days)
+
+
+@cached("analytics:geo-balance", ttl=900, key_args=("days",))
+async def _compute_geo_balance(days: int = 7):
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return {"nodes": [], "recommendations": [], "regions": []}
+
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+
+        async with db_service.acquire() as conn:
+            # Node load + metrics
+            node_rows = await conn.fetch(
+                """
+                SELECT uuid::text, name, is_connected, is_disabled,
+                       cpu_usage, memory_usage, disk_usage, users_online,
+                       traffic_used_bytes
+                FROM nodes ORDER BY name
+                """
+            )
+
+            # User distribution by country per node (from connections + ip_metadata)
+            geo_rows = await conn.fetch(
+                """
+                SELECT
+                    uc.node_uuid::text AS node_uuid,
+                    COALESCE(im.country_code, '??') AS country_code,
+                    COALESCE(im.country_name, 'Unknown') AS country_name,
+                    COUNT(DISTINCT uc.user_uuid) AS user_count,
+                    COUNT(*) AS connection_count
+                FROM user_connections uc
+                LEFT JOIN ip_metadata im
+                    ON SPLIT_PART(uc.ip_address::text, '/', 1) = TRIM(im.ip_address)
+                WHERE uc.connected_at >= $1
+                GROUP BY uc.node_uuid, im.country_code, im.country_name
+                ORDER BY user_count DESC
+                """,
+                since,
+            )
+
+            # Total users per country (for unserved region detection)
+            country_totals = await conn.fetch(
+                """
+                SELECT
+                    COALESCE(im.country_code, '??') AS country_code,
+                    COALESCE(im.country_name, 'Unknown') AS country_name,
+                    COUNT(DISTINCT uc.user_uuid) AS user_count
+                FROM user_connections uc
+                LEFT JOIN ip_metadata im
+                    ON SPLIT_PART(uc.ip_address::text, '/', 1) = TRIM(im.ip_address)
+                WHERE uc.connected_at >= $1
+                GROUP BY im.country_code, im.country_name
+                ORDER BY user_count DESC
+                LIMIT 30
+                """,
+                since,
+            )
+
+        # Build node data with geo breakdown
+        node_geo: Dict[str, List] = defaultdict(list)
+        for r in geo_rows:
+            node_geo[r["node_uuid"]].append({
+                "country_code": r["country_code"],
+                "country_name": r["country_name"],
+                "user_count": r["user_count"],
+                "connection_count": r["connection_count"],
+            })
+
+        nodes = []
+        overloaded = []
+        for n in node_rows:
+            uuid = n["uuid"]
+            cpu = n["cpu_usage"] or 0
+            mem = n["memory_usage"] or 0
+            disk = n["disk_usage"] or 0
+            online = n["users_online"] or 0
+
+            is_overloaded = cpu > 80 or mem > 85 or disk > 90
+            node_data = {
+                "uuid": uuid,
+                "name": n["name"],
+                "is_connected": n["is_connected"],
+                "is_disabled": n["is_disabled"],
+                "cpu_usage": round(cpu, 1),
+                "memory_usage": round(mem, 1),
+                "disk_usage": round(disk, 1),
+                "users_online": online,
+                "is_overloaded": is_overloaded,
+                "top_countries": node_geo.get(uuid, [])[:5],
+            }
+            nodes.append(node_data)
+            if is_overloaded and n["is_connected"]:
+                overloaded.append(node_data)
+
+        # Compute median users_online for comparison
+        online_values = [n["users_online"] for n in nodes if n["is_connected"] and not n["is_disabled"]]
+        median_online = sorted(online_values)[len(online_values) // 2] if online_values else 0
+
+        # Generate recommendations
+        recommendations = []
+
+        for n in overloaded:
+            reasons = []
+            if n["cpu_usage"] > 80:
+                reasons.append(f"CPU {n['cpu_usage']}%")
+            if n["memory_usage"] > 85:
+                reasons.append(f"RAM {n['memory_usage']}%")
+            if n["disk_usage"] > 90:
+                reasons.append(f"Disk {n['disk_usage']}%")
+            recommendations.append({
+                "type": "overloaded",
+                "severity": "critical" if n["cpu_usage"] > 90 or n["memory_usage"] > 90 else "warning",
+                "node": n["name"],
+                "node_uuid": n["uuid"],
+                "message": f"Нода {n['name']} перегружена: {', '.join(reasons)}",
+            })
+
+        # Detect nodes with way more users than median
+        for n in nodes:
+            if n["is_connected"] and not n["is_disabled"] and median_online > 0:
+                if n["users_online"] > median_online * 2.5 and n["users_online"] > 50:
+                    recommendations.append({
+                        "type": "unbalanced",
+                        "severity": "warning",
+                        "node": n["name"],
+                        "node_uuid": n["uuid"],
+                        "message": f"Нода {n['name']}: {n['users_online']} юзеров (медиана {median_online}). Рассмотрите перераспределение.",
+                    })
+
+        # Regions summary
+        regions = [
+            {"country_code": r["country_code"], "country_name": r["country_name"], "user_count": r["user_count"]}
+            for r in country_totals
+        ]
+
+        return {
+            "nodes": nodes,
+            "recommendations": recommendations,
+            "regions": regions,
+            "median_users_online": median_online,
+            "overloaded_count": len(overloaded),
+        }
+    except Exception as e:
+        logger.error("Geo-balance failed: %s", e)
+        return {"nodes": [], "recommendations": [], "regions": []}
