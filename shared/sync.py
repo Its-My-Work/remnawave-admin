@@ -889,11 +889,14 @@ class SyncService:
                             # Compute delta from previous snapshot
                             old_bytes = old_snapshot.get(user_uuid, {}).get(node_uuid, 0)
                             if new_bytes > old_bytes:
-                                # Same day, traffic grew
+                                # Same day, traffic grew — only count the difference
                                 delta = new_bytes - old_bytes
-                            else:
-                                # New day or first sync — take full value
+                            elif new_bytes < old_bytes:
+                                # New day or counter reset — take full new value
                                 delta = new_bytes
+                            else:
+                                # No change — no delta
+                                delta = 0
 
                             if delta > 0:
                                 raw_deltas[user_uuid] = raw_deltas.get(user_uuid, 0) + delta
