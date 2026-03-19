@@ -877,7 +877,7 @@ class DatabaseService:
         "lifetime_used_traffic_bytes": "COALESCE((raw_data->>'lifetimeUsedTrafficBytes')::bigint, 0)",
         "traffic_limit_bytes": "COALESCE(traffic_limit_bytes, 0)",
         "hwid_device_limit": "COALESCE(hwid_device_limit, 0)",
-        "online_at": "(raw_data->'userTraffic'->>'onlineAt')",
+        "online_at": "immutable_tstz(raw_data->'userTraffic'->>'onlineAt')",
     }
 
     async def get_users_paginated(
@@ -941,20 +941,22 @@ class DatabaseService:
             conditions.append("expire_at >= NOW() AND expire_at <= NOW() + INTERVAL '30 days'")
 
         # Filter: online status (from JSONB userTraffic.onlineAt)
+        # Uses immutable_tstz() wrapper to match the functional index
         _online_expr = "raw_data->'userTraffic'->>'onlineAt'"
+        _online_ts = f"immutable_tstz({_online_expr})"
         if online_filter == "never":
             conditions.append(f"({_online_expr}) IS NULL")
         elif online_filter == "online_24h":
             conditions.append(
-                f"({_online_expr}) IS NOT NULL AND ({_online_expr})::timestamptz >= NOW() - INTERVAL '24 hours'"
+                f"({_online_expr}) IS NOT NULL AND {_online_ts} >= NOW() - INTERVAL '24 hours'"
             )
         elif online_filter == "online_7d":
             conditions.append(
-                f"({_online_expr}) IS NOT NULL AND ({_online_expr})::timestamptz >= NOW() - INTERVAL '7 days'"
+                f"({_online_expr}) IS NOT NULL AND {_online_ts} >= NOW() - INTERVAL '7 days'"
             )
         elif online_filter == "online_30d":
             conditions.append(
-                f"({_online_expr}) IS NOT NULL AND ({_online_expr})::timestamptz >= NOW() - INTERVAL '30 days'"
+                f"({_online_expr}) IS NOT NULL AND {_online_ts} >= NOW() - INTERVAL '30 days'"
             )
 
         # Filter: traffic usage percentage
