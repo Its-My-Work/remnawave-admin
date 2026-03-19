@@ -26,11 +26,13 @@ class TestOverview:
     """GET /api/v2/analytics/overview."""
 
     @pytest.mark.asyncio
-    @patch("web.backend.api.v2.analytics.fetch_users_from_api", new_callable=AsyncMock, return_value=MOCK_USERS)
+    @patch("web.backend.api.v2.analytics._get_users_overview_stats", new_callable=AsyncMock,
+           return_value={"total": 3, "active": 2, "disabled": 1, "expired": 0,
+                         "limited": 0, "total_used_traffic_bytes": 3500})
     @patch("web.backend.api.v2.analytics.fetch_nodes_from_api", new_callable=AsyncMock, return_value=MOCK_NODES)
     @patch("web.backend.api.v2.analytics.fetch_hosts_from_api", new_callable=AsyncMock, return_value=MOCK_HOSTS)
     @patch("web.backend.api.v2.analytics.fetch_bandwidth_stats", new_callable=AsyncMock, return_value=None)
-    async def test_overview_success(self, mock_bw, mock_hosts, mock_nodes, mock_users, client):
+    async def test_overview_success(self, mock_bw, mock_hosts, mock_nodes, mock_stats, client):
         # Clear any cached values
         from web.backend.core.cache import cache
         await cache.delete("analytics:overview")
@@ -49,7 +51,9 @@ class TestOverview:
         app.dependency_overrides[get_current_admin] = lambda: viewer
         from httpx import ASGITransport, AsyncClient
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            with patch("web.backend.api.v2.analytics.fetch_users_from_api", new_callable=AsyncMock, return_value=[]):
+            with patch("web.backend.api.v2.analytics._get_users_overview_stats", new_callable=AsyncMock,
+                       return_value={"total": 0, "active": 0, "disabled": 0, "expired": 0,
+                                     "limited": 0, "total_used_traffic_bytes": 0}):
                 with patch("web.backend.api.v2.analytics.fetch_nodes_from_api", new_callable=AsyncMock, return_value=[]):
                     with patch("web.backend.api.v2.analytics.fetch_hosts_from_api", new_callable=AsyncMock, return_value=[]):
                         with patch("web.backend.api.v2.analytics.fetch_bandwidth_stats", new_callable=AsyncMock, return_value=None):

@@ -836,6 +836,211 @@ class DatabaseService:
             
             return stats
     
+    async def get_users_count_by_status(self) -> Dict[str, Any]:
+        """
+        Get user counts grouped by status + total traffic sum via SQL aggregation.
+        Returns: {total, active, disabled, expired, limited, total_used_traffic_bytes}
+        """
+        if not self.is_connected:
+            return {"total": 0, "active": 0, "disabled": 0, "expired": 0,
+                    "limited": 0, "total_used_traffic_bytes": 0}
+
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE LOWER(status) = 'active') AS active,
+                    COUNT(*) FILTER (WHERE LOWER(status) = 'disabled') AS disabled,
+                    COUNT(*) FILTER (WHERE LOWER(status) = 'expired') AS expired,
+                    COUNT(*) FILTER (WHERE LOWER(status) = 'limited') AS limited,
+                    COALESCE(SUM(used_traffic_bytes), 0) AS total_used_traffic_bytes
+                FROM users
+                """
+            )
+            return dict(row) if row else {
+                "total": 0, "active": 0, "disabled": 0, "expired": 0,
+                "limited": 0, "total_used_traffic_bytes": 0,
+            }
+
+    # Allowed sort columns for paginated queries (column name -> SQL expression)
+    _PAGINATED_SORT_MAP = {
+        "created_at": "created_at",
+        "username": "username",
+        "status": "status",
+        "expire_at": "expire_at",
+        "email": "email",
+        "uuid": "uuid",
+        "updated_at": "updated_at",
+        "used_traffic_bytes": "COALESCE(used_traffic_bytes, 0)",
+        "raw_used_traffic_bytes": "COALESCE(raw_used_traffic_bytes, 0)",
+        "lifetime_used_traffic_bytes": "COALESCE((raw_data->>'lifetimeUsedTrafficBytes')::bigint, 0)",
+        "traffic_limit_bytes": "COALESCE(traffic_limit_bytes, 0)",
+        "hwid_device_limit": "COALESCE(hwid_device_limit, 0)",
+        "online_at": "(raw_data->'userTraffic'->>'onlineAt')",
+    }
+
+    async def get_users_paginated(
+        self,
+        page: int = 1,
+        per_page: int = 20,
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        traffic_type: Optional[str] = None,
+        expire_filter: Optional[str] = None,
+        online_filter: Optional[str] = None,
+        traffic_usage: Optional[str] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+    ) -> tuple:
+        """
+        Get paginated users with server-side filtering and sorting.
+        Returns (users_list, total_count).
+        """
+        if not self.is_connected:
+            return [], 0
+
+        conditions = []
+        args = []
+        param_idx = 0
+
+        # Filter: search
+        if search:
+            param_idx += 1
+            like_param = f"${param_idx}"
+            args.append(f"%{search}%")
+            conditions.append(
+                f"(LOWER(username) LIKE LOWER({like_param})"
+                f" OR LOWER(email) LIKE LOWER({like_param})"
+                f" OR uuid::text LIKE {like_param}"
+                f" OR short_uuid LIKE {like_param}"
+                f" OR telegram_id::text LIKE {like_param}"
+                f" OR LOWER(description) LIKE LOWER({like_param}))"
+            )
+
+        # Filter: status
+        if status:
+            param_idx += 1
+            args.append(status.lower())
+            conditions.append(f"LOWER(status) = ${param_idx}")
+
+        # Filter: traffic type
+        if traffic_type == "unlimited":
+            conditions.append("(traffic_limit_bytes IS NULL OR traffic_limit_bytes = 0)")
+        elif traffic_type == "limited":
+            conditions.append("(traffic_limit_bytes IS NOT NULL AND traffic_limit_bytes > 0)")
+
+        # Filter: expiration
+        if expire_filter == "no_expiry":
+            conditions.append("expire_at IS NULL")
+        elif expire_filter == "expired":
+            conditions.append("expire_at < NOW()")
+        elif expire_filter == "expiring_7d":
+            conditions.append("expire_at >= NOW() AND expire_at <= NOW() + INTERVAL '7 days'")
+        elif expire_filter == "expiring_30d":
+            conditions.append("expire_at >= NOW() AND expire_at <= NOW() + INTERVAL '30 days'")
+
+        # Filter: online status (from JSONB userTraffic.onlineAt)
+        _online_expr = "raw_data->'userTraffic'->>'onlineAt'"
+        if online_filter == "never":
+            conditions.append(f"({_online_expr}) IS NULL")
+        elif online_filter == "online_24h":
+            conditions.append(
+                f"({_online_expr}) IS NOT NULL AND ({_online_expr})::timestamptz >= NOW() - INTERVAL '24 hours'"
+            )
+        elif online_filter == "online_7d":
+            conditions.append(
+                f"({_online_expr}) IS NOT NULL AND ({_online_expr})::timestamptz >= NOW() - INTERVAL '7 days'"
+            )
+        elif online_filter == "online_30d":
+            conditions.append(
+                f"({_online_expr}) IS NOT NULL AND ({_online_expr})::timestamptz >= NOW() - INTERVAL '30 days'"
+            )
+
+        # Filter: traffic usage percentage
+        if traffic_usage == "zero":
+            conditions.append("COALESCE(used_traffic_bytes, 0) = 0")
+        elif traffic_usage in ("above_50", "above_70", "above_90"):
+            threshold = {"above_50": 0.5, "above_70": 0.7, "above_90": 0.9}[traffic_usage]
+            param_idx += 1
+            args.append(threshold)
+            conditions.append(
+                f"traffic_limit_bytes > 0 AND (used_traffic_bytes::float / traffic_limit_bytes) >= ${param_idx}"
+            )
+
+        where_clause = " AND ".join(conditions) if conditions else "TRUE"
+
+        # Sort
+        sort_expr = self._PAGINATED_SORT_MAP.get(sort_by, "created_at")
+        direction = "DESC" if sort_order == "desc" else "ASC"
+        nulls = "NULLS LAST" if direction == "DESC" else "NULLS FIRST"
+        order_clause = f"{sort_expr} {direction} {nulls}"
+
+        # Pagination
+        offset = (page - 1) * per_page
+        param_idx += 1
+        args.append(per_page)
+        limit_param = f"${param_idx}"
+        param_idx += 1
+        args.append(offset)
+        offset_param = f"${param_idx}"
+
+        query = f"""
+            SELECT *, COUNT(*) OVER() AS _total_count
+            FROM users
+            WHERE {where_clause}
+            ORDER BY {order_clause}
+            LIMIT {limit_param} OFFSET {offset_param}
+        """
+
+        async with self.acquire() as conn:
+            rows = await conn.fetch(query, *args)
+
+        if not rows:
+            # No results — still need total count for empty filter results
+            count_query = f"SELECT COUNT(*) FROM users WHERE {where_clause}"
+            # Remove limit/offset args for count query
+            count_args = args[:-2]
+            async with self.acquire() as conn:
+                total = await conn.fetchval(count_query, *count_args)
+            return [], total or 0
+
+        total = rows[0]["_total_count"]
+        users = [_db_row_to_api_format(row) for row in rows]
+        return users, total
+
+    async def get_hwid_device_counts_for_uuids(self, user_uuids: List[str]) -> Dict[str, int]:
+        """Get HWID device counts for specific users by UUID list."""
+        if not self.is_connected or not user_uuids:
+            return {}
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT user_uuid, COUNT(*) as cnt FROM user_hwid_devices "
+                    "WHERE user_uuid = ANY($1::uuid[]) GROUP BY user_uuid",
+                    user_uuids
+                )
+                return {str(row["user_uuid"]): row["cnt"] for row in rows}
+        except Exception as e:
+            logger.error("Error getting HWID counts for UUIDs: %s", e, exc_info=True)
+            return {}
+
+    async def get_raw_traffic_for_uuids(self, user_uuids: List[str]) -> Dict[str, int]:
+        """Get raw traffic sums for specific users by UUID list."""
+        if not self.is_connected or not user_uuids:
+            return {}
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT uuid::text, raw_used_traffic_bytes FROM users "
+                    "WHERE uuid = ANY($1::uuid[]) AND raw_used_traffic_bytes > 0",
+                    user_uuids
+                )
+                return {r["uuid"]: int(r["raw_used_traffic_bytes"]) for r in rows}
+        except Exception as e:
+            logger.error("Error getting raw traffic for UUIDs: %s", e, exc_info=True)
+            return {}
+
     async def get_users_by_status(self, status: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Get users by status in API format."""
         if not self.is_connected:

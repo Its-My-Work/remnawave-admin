@@ -113,6 +113,112 @@ def _parse_dt(val) -> Optional[datetime]:
     return None
 
 
+def _filter_users_in_memory(
+    users: list, *, search=None, status=None, traffic_type=None,
+    expire_filter=None, online_filter=None, traffic_usage=None,
+    sort_by="created_at", sort_order="desc", page=1, per_page=20,
+) -> tuple:
+    """In-memory filtering/sorting/pagination fallback for API path."""
+    now = datetime.now(timezone.utc)
+
+    def _get(u, *keys, default=''):
+        for k in keys:
+            v = u.get(k)
+            if v is not None:
+                return v
+        return default
+
+    if search:
+        sl = search.lower()
+        users = [
+            u for u in users
+            if sl in str(_get(u, 'username')).lower()
+            or sl in str(_get(u, 'email')).lower()
+            or sl in str(_get(u, 'uuid')).lower()
+            or sl in str(_get(u, 'short_uuid')).lower()
+            or sl in str(_get(u, 'telegram_id')).lower()
+            or sl in str(_get(u, 'description')).lower()
+        ]
+
+    if status:
+        status_lower = status.lower()
+        users = [u for u in users if str(_get(u, 'status')).lower() == status_lower]
+
+    if traffic_type == 'unlimited':
+        users = [u for u in users if not u.get('traffic_limit_bytes')]
+    elif traffic_type == 'limited':
+        users = [u for u in users if u.get('traffic_limit_bytes') and u['traffic_limit_bytes'] > 0]
+
+    if expire_filter:
+        def _expire_match(u):
+            expire = _parse_dt(u.get('expire_at'))
+            if expire_filter == 'no_expiry':
+                return expire is None
+            if expire is None:
+                return False
+            if expire.tzinfo is None:
+                expire = expire.replace(tzinfo=timezone.utc)
+            if expire_filter == 'expired':
+                return expire < now
+            if expire_filter == 'expiring_7d':
+                return now <= expire <= now + timedelta(days=7)
+            if expire_filter == 'expiring_30d':
+                return now <= expire <= now + timedelta(days=30)
+            return True
+        users = [u for u in users if _expire_match(u)]
+
+    if online_filter:
+        def _online_match(u):
+            online = _parse_dt(u.get('online_at'))
+            if online_filter == 'never':
+                return online is None
+            if online is None:
+                return False
+            if online.tzinfo is None:
+                online = online.replace(tzinfo=timezone.utc)
+            if online_filter == 'online_24h':
+                return online >= now - timedelta(hours=24)
+            if online_filter == 'online_7d':
+                return online >= now - timedelta(days=7)
+            if online_filter == 'online_30d':
+                return online >= now - timedelta(days=30)
+            return True
+        users = [u for u in users if _online_match(u)]
+
+    if traffic_usage:
+        def _traffic_usage_match(u):
+            used = u.get('used_traffic_bytes', 0) or 0
+            limit_val = u.get('traffic_limit_bytes')
+            if traffic_usage == 'zero':
+                return used == 0
+            if not limit_val or limit_val == 0:
+                return False
+            pct = (used / limit_val) * 100
+            thresholds = {'above_90': 90, 'above_70': 70, 'above_50': 50}
+            return pct >= thresholds.get(traffic_usage, 0)
+        users = [u for u in users if _traffic_usage_match(u)]
+
+    reverse = sort_order == "desc"
+    if sort_by in ('used_traffic_bytes', 'raw_used_traffic_bytes', 'lifetime_used_traffic_bytes', 'hwid_device_limit'):
+        users.sort(key=lambda x: x.get(sort_by, 0) or 0, reverse=reverse)
+    elif sort_by == 'traffic_limit_bytes':
+        def _tlk(u):
+            val = u.get('traffic_limit_bytes')
+            return val if val else (float('inf') if not reverse else -1)
+        users.sort(key=_tlk, reverse=reverse)
+    elif sort_by in ('online_at', 'expire_at'):
+        def _dsk(u):
+            val = _parse_dt(u.get(sort_by))
+            return val.isoformat() if val else ('' if not reverse else 'zzzz')
+        users.sort(key=_dsk, reverse=reverse)
+    else:
+        users.sort(key=lambda x: _get(x, sort_by) or '', reverse=reverse)
+
+    total = len(users)
+    start = (page - 1) * per_page
+    return users[start:start + per_page], total
+
+
 @router.get("", response_model=PaginatedResponse[UserListItem])
 async def list_users(
     page: int = Query(1, ge=1),
@@ -129,176 +235,67 @@ async def list_users(
 ):
     """List users with pagination and filtering."""
     try:
-        users = await _get_users_list()
-        # Normalize all users to have snake_case keys
+        users = []
+        total = 0
+        db_available = False
+
+        # Primary path: SQL pagination in database
+        try:
+            from shared.database import db_service
+            if db_service.is_connected:
+                users, total = await db_service.get_users_paginated(
+                    page=page, per_page=per_page,
+                    search=search, status=status,
+                    traffic_type=traffic_type,
+                    expire_filter=expire_filter,
+                    online_filter=online_filter,
+                    traffic_usage=traffic_usage,
+                    sort_by=sort_by, sort_order=sort_order,
+                )
+                db_available = True
+        except Exception as e:
+            logger.warning("DB paginated users failed, falling back to API: %s", e)
+
+        if not db_available:
+            # Fallback: API with in-memory filtering (old behavior)
+            users = await _get_users_list()
+            users = [_ensure_snake_case(u) for u in users]
+            users, total = _filter_users_in_memory(
+                users, search=search, status=status,
+                traffic_type=traffic_type, expire_filter=expire_filter,
+                online_filter=online_filter, traffic_usage=traffic_usage,
+                sort_by=sort_by, sort_order=sort_order,
+                page=page, per_page=per_page,
+            )
+
+        # Normalize to snake_case
         users = [_ensure_snake_case(u) for u in users]
 
-        # Enrich with HWID device counts and raw traffic from local DB (single query each, no API calls)
-        try:
-            from shared.database import db_service
-            if db_service.is_connected:
-                device_counts = await db_service.get_hwid_device_counts_bulk()
-                if device_counts:
-                    for u in users:
-                        uid = u.get('uuid')
-                        if uid and uid in device_counts:
-                            u['hwid_device_count'] = device_counts[uid]
-        except Exception as e:
-            logger.debug("Failed to enrich hwid device counts: %s", e)
-
-        # Enrich with raw traffic (without node multipliers) accumulated in users table
-        try:
-            from shared.database import db_service
-            if db_service.is_connected:
-                raw_traffic = await db_service.get_raw_traffic_sums()
-                if raw_traffic:
-                    for u in users:
-                        uid = u.get('uuid')
-                        if uid and uid in raw_traffic:
-                            u['raw_used_traffic_bytes'] = raw_traffic[uid]
-        except Exception as e:
-            logger.debug("Failed to enrich raw traffic: %s", e)
-
-        now = datetime.now(timezone.utc)
-
-        def _get(u, *keys, default=''):
-            for k in keys:
-                v = u.get(k)
-                if v is not None:
-                    return v
-            return default
-
-        # Filter: search
-        if search:
-            search_lower = search.lower()
-            users = [
-                u for u in users
-                if search_lower in str(_get(u, 'username')).lower()
-                or search_lower in str(_get(u, 'email')).lower()
-                or search_lower in str(_get(u, 'uuid')).lower()
-                or search_lower in str(_get(u, 'short_uuid')).lower()
-                or search_lower in str(_get(u, 'telegram_id')).lower()
-                or search_lower in str(_get(u, 'description')).lower()
-            ]
-
-        # Filter: status
-        if status:
-            status_lower = status.lower()
-            users = [u for u in users if str(_get(u, 'status')).lower() == status_lower]
-
-        # Filter: traffic type
-        if traffic_type:
-            if traffic_type == 'unlimited':
-                users = [u for u in users if u.get('traffic_limit_bytes') is None or u.get('traffic_limit_bytes') == 0]
-            elif traffic_type == 'limited':
-                users = [u for u in users if u.get('traffic_limit_bytes') is not None and u.get('traffic_limit_bytes') > 0]
-
-        # Filter: expiration
-        if expire_filter:
-            def _expire_match(u):
-                expire = _parse_dt(u.get('expire_at'))
-                if expire_filter == 'no_expiry':
-                    return expire is None
-                if expire is None:
-                    return False
-                # Ensure timezone-aware comparison
-                if expire.tzinfo is None:
-                    expire = expire.replace(tzinfo=timezone.utc)
-                if expire_filter == 'expired':
-                    return expire < now
-                if expire_filter == 'expiring_7d':
-                    return now <= expire <= now + timedelta(days=7)
-                if expire_filter == 'expiring_30d':
-                    return now <= expire <= now + timedelta(days=30)
-                return True
-            users = [u for u in users if _expire_match(u)]
-
-        # Filter: online status
-        if online_filter:
-            def _online_match(u):
-                online = _parse_dt(u.get('online_at'))
-                if online_filter == 'never':
-                    return online is None
-                if online is None:
-                    return False
-                if online.tzinfo is None:
-                    online = online.replace(tzinfo=timezone.utc)
-                if online_filter == 'online_24h':
-                    return online >= now - timedelta(hours=24)
-                if online_filter == 'online_7d':
-                    return online >= now - timedelta(days=7)
-                if online_filter == 'online_30d':
-                    return online >= now - timedelta(days=30)
-                return True
-            users = [u for u in users if _online_match(u)]
-
-        # Filter: traffic usage percentage
-        if traffic_usage:
-            def _traffic_usage_match(u):
-                used = u.get('used_traffic_bytes', 0) or 0
-                limit = u.get('traffic_limit_bytes')
-                if traffic_usage == 'zero':
-                    return used == 0
-                # Percentage-based filters only apply to limited users
-                if not limit or limit == 0:
-                    return False
-                pct = (used / limit) * 100
-                if traffic_usage == 'above_90':
-                    return pct >= 90
-                if traffic_usage == 'above_70':
-                    return pct >= 70
-                if traffic_usage == 'above_50':
-                    return pct >= 50
-                return True
-            users = [u for u in users if _traffic_usage_match(u)]
-
-        # Sort
-        reverse = sort_order == "desc"
-        sort_key_map = {
-            'created_at': ('created_at',),
-            'username': ('username',),
-            'status': ('status',),
-            'expire_at': ('expire_at',),
-            'online_at': ('online_at',),
-        }
-
-        if sort_by == 'used_traffic_bytes':
-            users.sort(key=lambda x: x.get('used_traffic_bytes', 0) or 0, reverse=reverse)
-        elif sort_by == 'raw_used_traffic_bytes':
-            users.sort(key=lambda x: x.get('raw_used_traffic_bytes', 0) or 0, reverse=reverse)
-        elif sort_by == 'lifetime_used_traffic_bytes':
-            users.sort(key=lambda x: x.get('lifetime_used_traffic_bytes', 0) or 0, reverse=reverse)
-        elif sort_by == 'traffic_limit_bytes':
-            def _traffic_limit_key(u):
-                val = u.get('traffic_limit_bytes')
-                if val is None or val == 0:
-                    return float('inf') if not reverse else -1
-                return val
-            users.sort(key=_traffic_limit_key, reverse=reverse)
-        elif sort_by == 'hwid_device_limit':
-            users.sort(key=lambda x: x.get('hwid_device_limit', 0) or 0, reverse=reverse)
-        elif sort_by in ('online_at', 'expire_at'):
-            # Date fields: None values go to end
-            def _date_sort_key(u):
-                val = _parse_dt(u.get(sort_by))
-                if val is None:
-                    return '' if not reverse else 'zzzz'
-                return val.isoformat()
-            users.sort(key=_date_sort_key, reverse=reverse)
-        else:
-            sort_keys = sort_key_map.get(sort_by, (sort_by,))
-            users.sort(key=lambda x: _get(x, *sort_keys) or '', reverse=reverse)
-
-        # Paginate
-        total = len(users)
-        start_idx = (page - 1) * per_page
-        end_idx = start_idx + per_page
-        items = users[start_idx:end_idx]
+        # Enrich ONLY current page with hwid_device_count and raw_traffic
+        user_uuids = [u.get('uuid') for u in users if u.get('uuid')]
+        if user_uuids:
+            try:
+                from shared.database import db_service
+                if db_service.is_connected:
+                    device_counts = await db_service.get_hwid_device_counts_for_uuids(user_uuids)
+                    if device_counts:
+                        for u in users:
+                            uid = u.get('uuid')
+                            if uid and uid in device_counts:
+                                u['hwid_device_count'] = device_counts[uid]
+                    raw_traffic = await db_service.get_raw_traffic_for_uuids(user_uuids)
+                    if raw_traffic:
+                        for u in users:
+                            uid = u.get('uuid')
+                            if uid and uid in raw_traffic:
+                                u['raw_used_traffic_bytes'] = raw_traffic[uid]
+            except Exception as e:
+                logger.debug("Failed to enrich page data: %s", e)
 
         # Convert to schema
         user_items = []
         parse_errors = 0
-        for u in items:
+        for u in users:
             try:
                 user_items.append(UserListItem(**u))
             except Exception as e:
@@ -308,7 +305,7 @@ async def list_users(
                                    u.get('uuid', '?'), e, list(u.keys())[:10])
 
         if parse_errors > 0:
-            logger.warning("Failed to parse %d/%d users on page %d", parse_errors, len(items), page)
+            logger.warning("Failed to parse %d/%d users on page %d", parse_errors, len(users), page)
 
         return PaginatedResponse(
             items=user_items,

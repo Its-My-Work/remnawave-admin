@@ -277,18 +277,42 @@ def _get_users_online(node: Dict[str, Any]) -> int:
         return 0
 
 
+async def _get_users_overview_stats() -> Dict[str, Any]:
+    """Get user counts by status from DB (SQL aggregation), fall back to API."""
+    try:
+        from shared.database import db_service
+        if db_service.is_connected:
+            stats = await db_service.get_users_count_by_status()
+            if stats.get('total', 0) > 0:
+                return stats
+    except Exception as e:
+        logger.debug("DB user count stats failed: %s", e)
+
+    # Fallback: load from API (API has its own limits, acceptable)
+    users = await fetch_users_from_api()
+    total = len(users)
+    active = sum(1 for u in users if _get_user_status(u) == 'active')
+    disabled = sum(1 for u in users if _get_user_status(u) == 'disabled')
+    expired = sum(1 for u in users if _get_user_status(u) == 'expired')
+    traffic = sum(_get_traffic_bytes(u) for u in users)
+    return {
+        'total': total, 'active': active, 'disabled': disabled,
+        'expired': expired, 'limited': 0, 'total_used_traffic_bytes': traffic,
+    }
+
+
 @cached("analytics:overview", ttl=CACHE_TTL_SHORT)
 async def _compute_overview() -> OverviewStats:
     """Compute overview stats (cacheable)."""
-    users = await _get_users_data()
+    user_stats = await _get_users_overview_stats()
     nodes = await _get_nodes_data()
     hosts = await _get_hosts_data()
     violations = await _get_violation_counts()
 
-    total_users = len(users)
-    active_users = sum(1 for u in users if _get_user_status(u) == 'active')
-    disabled_users = sum(1 for u in users if _get_user_status(u) == 'disabled')
-    expired_users = sum(1 for u in users if _get_user_status(u) == 'expired')
+    total_users = user_stats['total']
+    active_users = user_stats['active']
+    disabled_users = user_stats['disabled']
+    expired_users = user_stats['expired']
 
     total_nodes = len(nodes)
     disabled_nodes = sum(1 for n in nodes if _is_node_disabled(n))
@@ -305,7 +329,7 @@ async def _compute_overview() -> OverviewStats:
         except (ValueError, TypeError):
             pass
     if not total_traffic_bytes:
-        user_traffic = sum(_get_traffic_bytes(u) for u in users)
+        user_traffic = user_stats.get('total_used_traffic_bytes', 0)
         node_traffic = sum(_get_node_traffic(n) for n in nodes)
         total_traffic_bytes = max(user_traffic, node_traffic)
     users_online = sum(_get_users_online(n) for n in nodes)
@@ -428,9 +452,19 @@ async def _compute_traffic() -> TrafficStats:
                 today_bytes = realtime_total
 
     if not total_bytes:
-        users = await _get_users_data()
+        user_traffic = 0
+        try:
+            from shared.database import db_service
+            if db_service.is_connected:
+                stats = await db_service.get_users_count_by_status()
+                user_traffic = stats.get('total_used_traffic_bytes', 0)
+        except Exception:
+            users = await fetch_users_from_api()
+            user_traffic = sum(_get_traffic_bytes(u) for u in users)
+        if not user_traffic:
+            users = await fetch_users_from_api()
+            user_traffic = sum(_get_traffic_bytes(u) for u in users)
         nodes = await _get_nodes_data()
-        user_traffic = sum(_get_traffic_bytes(u) for u in users)
         node_traffic = sum(_get_node_traffic(n) for n in nodes)
         total_bytes = max(user_traffic, node_traffic)
 

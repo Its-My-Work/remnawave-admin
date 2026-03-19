@@ -61,7 +61,9 @@ class TestListUsers:
 
     @pytest.mark.asyncio
     @patch("web.backend.api.v2.users._get_users_list", new_callable=AsyncMock, return_value=MOCK_USERS)
-    async def test_list_users_success(self, mock_get, client):
+    @patch("shared.database.db_service")
+    async def test_list_users_success(self, mock_db, mock_get, client):
+        mock_db.is_connected = False  # Force API fallback path
         resp = await client.get("/api/v2/users")
         assert resp.status_code == 200
         data = resp.json()
@@ -70,7 +72,9 @@ class TestListUsers:
 
     @pytest.mark.asyncio
     @patch("web.backend.api.v2.users._get_users_list", new_callable=AsyncMock, return_value=MOCK_USERS)
-    async def test_list_users_pagination(self, mock_get, client):
+    @patch("shared.database.db_service")
+    async def test_list_users_pagination(self, mock_db, mock_get, client):
+        mock_db.is_connected = False
         resp = await client.get("/api/v2/users?page=1&per_page=1")
         assert resp.status_code == 200
         data = resp.json()
@@ -79,7 +83,9 @@ class TestListUsers:
 
     @pytest.mark.asyncio
     @patch("web.backend.api.v2.users._get_users_list", new_callable=AsyncMock, return_value=MOCK_USERS)
-    async def test_list_users_search(self, mock_get, client):
+    @patch("shared.database.db_service")
+    async def test_list_users_search(self, mock_db, mock_get, client):
+        mock_db.is_connected = False
         resp = await client.get("/api/v2/users?search=alice")
         assert resp.status_code == 200
         data = resp.json()
@@ -88,7 +94,9 @@ class TestListUsers:
 
     @pytest.mark.asyncio
     @patch("web.backend.api.v2.users._get_users_list", new_callable=AsyncMock, return_value=MOCK_USERS)
-    async def test_list_users_filter_status(self, mock_get, client):
+    @patch("shared.database.db_service")
+    async def test_list_users_filter_status(self, mock_db, mock_get, client):
+        mock_db.is_connected = False
         resp = await client.get("/api/v2/users?status=active")
         assert resp.status_code == 200
         data = resp.json()
@@ -101,13 +109,17 @@ class TestListUsers:
         app.dependency_overrides[get_current_admin] = lambda: viewer
         from httpx import ASGITransport, AsyncClient
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            with patch("web.backend.api.v2.users._get_users_list", new_callable=AsyncMock, return_value=[]):
-                resp = await ac.get("/api/v2/users")
-                assert resp.status_code == 200
+            with patch("shared.database.db_service") as mock_db:
+                mock_db.is_connected = False
+                with patch("web.backend.api.v2.users._get_users_list", new_callable=AsyncMock, return_value=[]):
+                    resp = await ac.get("/api/v2/users")
+                    assert resp.status_code == 200
 
     @pytest.mark.asyncio
     @patch("web.backend.api.v2.users._get_users_list", new_callable=AsyncMock, return_value=[])
-    async def test_list_users_empty(self, mock_get, client):
+    @patch("shared.database.db_service")
+    async def test_list_users_empty(self, mock_db, mock_get, client):
+        mock_db.is_connected = False
         resp = await client.get("/api/v2/users")
         assert resp.status_code == 200
         data = resp.json()
