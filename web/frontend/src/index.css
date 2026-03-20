@@ -540,11 +540,46 @@
   animation: none;
 }
 
-/* Mobile: lighter blur for performance */
+/* Mobile: disable expensive effects for performance */
 @media (max-width: 768px) {
   .mesh-layer {
     opacity: 0.08;
     filter: blur(40px);
+    animation: none !important;
+  }
+
+  .glass,
+  .glass-rim,
+  .glass-heavy,
+  .glass-card {
+    backdrop-filter: blur(4px) !important;
+    -webkit-backdrop-filter: blur(4px) !important;
+    will-change: auto !important;
+  }
+
+  .glass-card {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+    transition: none !important;
+  }
+
+  .glass-card:hover {
+    transform: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+  }
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .mesh-layer {
+    animation: none !important;
+  }
+
+  .glass-card {
+    transition: none !important;
+  }
+
+  .glass-card:hover {
+    transform: none;
   }
 }
 
@@ -568,7 +603,6 @@
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
     border: 1px solid var(--glass-border);
-    will-change: backdrop-filter;
   }
 
   .glass:hover {
@@ -584,7 +618,6 @@
     border: 1px solid var(--glass-border);
     border-top-color: rgba(255, 255, 255, 0.12);
     border-left-color: rgba(255, 255, 255, 0.04);
-    will-change: backdrop-filter;
   }
 
   /* Heavy glass (sidebar, modals) */
@@ -593,7 +626,6 @@
     backdrop-filter: blur(var(--glass-blur-heavy));
     -webkit-backdrop-filter: blur(var(--glass-blur-heavy));
     border: 1px solid var(--glass-border);
-    will-change: backdrop-filter;
   }
 
   /* Glass card — glass + floating shadow + rim + hover lift */
@@ -606,8 +638,7 @@
     box-shadow:
       0 8px 32px rgba(0, 0, 0, 0.12),
       inset 0 1px 0 var(--glass-highlight);
-    transition: all 0.25s ease;
-    will-change: backdrop-filter, transform;
+    transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
   }
 
   .glass-card:hover {

@@ -597,7 +597,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       <div
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex flex-col",
-          "bg-[var(--glass-bg)] backdrop-blur-[var(--glass-blur-heavy)] border-r border-[var(--glass-border)] animate-fade-in",
+          "glass-heavy border-r border-[var(--glass-border)] animate-fade-in",
           "transform transition-all duration-300 ease-in-out",
           "md:relative md:translate-x-0",
           collapsed ? "w-[4.5rem]" : "w-64",
