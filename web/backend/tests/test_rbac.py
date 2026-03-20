@@ -24,7 +24,7 @@ class TestAdminUserModel:
         assert admin.has_permission("users", "delete")
         assert admin.has_permission("admins", "create")
         assert admin.has_permission("settings", "edit")
-        assert admin.has_permission("automations", "delete")
+        assert admin.has_permission("automation", "delete")
 
     def test_viewer_has_only_view_permissions(self):
         admin = make_admin("viewer")
@@ -68,19 +68,25 @@ class TestRBACMatrix:
     """Test the full RBAC permission matrix — role × resource × action."""
 
     RESOURCES_ACTIONS = [
-        ("users", "view"), ("users", "create"), ("users", "edit"), ("users", "delete"),
+        ("users", "view"), ("users", "create"), ("users", "edit"), ("users", "delete"), ("users", "bulk_operations"),
         ("nodes", "view"), ("nodes", "create"), ("nodes", "edit"), ("nodes", "delete"),
         ("hosts", "view"), ("hosts", "create"), ("hosts", "edit"), ("hosts", "delete"),
-        ("violations", "view"), ("violations", "edit"),
+        ("violations", "view"), ("violations", "resolve"),
         ("analytics", "view"),
         ("admins", "view"), ("admins", "create"), ("admins", "edit"), ("admins", "delete"),
         ("roles", "view"), ("roles", "create"), ("roles", "edit"), ("roles", "delete"),
         ("audit", "view"),
         ("settings", "view"), ("settings", "edit"),
-        ("automations", "view"), ("automations", "create"), ("automations", "edit"), ("automations", "delete"),
-        ("fleet", "view"),
-        ("logs", "view"),
-        ("bulk", "execute"),
+        ("automation", "view"), ("automation", "create"), ("automation", "edit"), ("automation", "delete"), ("automation", "run"),
+        ("fleet", "view"), ("fleet", "edit"), ("fleet", "scripts"), ("fleet", "terminal"),
+        ("logs", "view"), ("logs", "edit"),
+        ("notifications", "view"), ("notifications", "create"), ("notifications", "edit"), ("notifications", "delete"),
+        ("resources", "view"), ("resources", "create"), ("resources", "edit"), ("resources", "delete"),
+        ("billing", "view"), ("billing", "create"), ("billing", "edit"), ("billing", "delete"),
+        ("reports", "view"), ("reports", "create"),
+        ("mailserver", "view"), ("mailserver", "create"), ("mailserver", "edit"), ("mailserver", "delete"),
+        ("backups", "view"), ("backups", "create"), ("backups", "delete"),
+        ("api_keys", "view"), ("api_keys", "create"), ("api_keys", "edit"), ("api_keys", "delete"),
     ]
 
     @pytest.mark.parametrize("resource,action", RESOURCES_ACTIONS)
@@ -97,8 +103,8 @@ class TestRBACMatrix:
         ("admins", "view"), ("admins", "create"), ("admins", "edit"), ("admins", "delete"),
         ("roles", "view"), ("roles", "create"), ("roles", "edit"), ("roles", "delete"),
         ("settings", "view"), ("settings", "edit"),
-        ("automations", "view"), ("automations", "create"), ("automations", "edit"), ("automations", "delete"),
-        ("bulk", "execute"),
+        ("automation", "view"), ("automation", "create"), ("automation", "edit"), ("automation", "delete"),
+        ("users", "bulk_operations"),
     ])
     def test_viewer_lacks_permission(self, resource, action):
         admin = make_admin("viewer")
@@ -121,7 +127,7 @@ class TestRBACMatrix:
         ("admins", "create"), ("admins", "delete"),
         ("roles", "create"), ("roles", "edit"), ("roles", "delete"),
         ("settings", "edit"),
-        ("automations", "delete"),
+        ("automation", "delete"),
     ])
     def test_manager_lacks_admin_permissions(self, resource, action):
         admin = make_admin("manager")
@@ -133,7 +139,7 @@ class TestRBACMatrix:
         ("users", "view"), ("users", "create"), ("users", "edit"), ("users", "delete"),
         ("nodes", "view"), ("nodes", "create"), ("nodes", "edit"), ("nodes", "delete"),
         ("hosts", "view"), ("hosts", "create"), ("hosts", "edit"), ("hosts", "delete"),
-        ("bulk", "execute"),
+        ("users", "bulk_operations"),
     ])
     def test_manager_has_resource_management(self, resource, action):
         admin = make_admin("manager")

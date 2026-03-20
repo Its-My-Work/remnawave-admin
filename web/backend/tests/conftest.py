@@ -38,19 +38,25 @@ from web.backend.main import create_app
 # ── Admin user fixtures ───────────────────────────────────────
 
 SUPERADMIN_PERMISSIONS: Set[Tuple[str, str]] = {
-    ("users", "view"), ("users", "create"), ("users", "edit"), ("users", "delete"),
+    ("users", "view"), ("users", "create"), ("users", "edit"), ("users", "delete"), ("users", "bulk_operations"),
     ("nodes", "view"), ("nodes", "create"), ("nodes", "edit"), ("nodes", "delete"),
     ("hosts", "view"), ("hosts", "create"), ("hosts", "edit"), ("hosts", "delete"),
-    ("violations", "view"), ("violations", "edit"),
+    ("violations", "view"), ("violations", "resolve"),
     ("analytics", "view"),
     ("admins", "view"), ("admins", "create"), ("admins", "edit"), ("admins", "delete"),
     ("roles", "view"), ("roles", "create"), ("roles", "edit"), ("roles", "delete"),
     ("audit", "view"),
     ("settings", "view"), ("settings", "edit"),
-    ("automations", "view"), ("automations", "create"), ("automations", "edit"), ("automations", "delete"),
-    ("fleet", "view"),
-    ("logs", "view"),
-    ("bulk", "execute"),
+    ("automation", "view"), ("automation", "create"), ("automation", "edit"), ("automation", "delete"), ("automation", "run"),
+    ("fleet", "view"), ("fleet", "edit"), ("fleet", "scripts"), ("fleet", "terminal"),
+    ("logs", "view"), ("logs", "edit"),
+    ("notifications", "view"), ("notifications", "create"), ("notifications", "edit"), ("notifications", "delete"),
+    ("resources", "view"), ("resources", "create"), ("resources", "edit"), ("resources", "delete"),
+    ("billing", "view"), ("billing", "create"), ("billing", "edit"), ("billing", "delete"),
+    ("reports", "view"), ("reports", "create"),
+    ("mailserver", "view"), ("mailserver", "create"), ("mailserver", "edit"), ("mailserver", "delete"),
+    ("backups", "view"), ("backups", "create"), ("backups", "delete"),
+    ("api_keys", "view"), ("api_keys", "create"), ("api_keys", "edit"), ("api_keys", "delete"),
 }
 
 VIEWER_PERMISSIONS: Set[Tuple[str, str]] = {
@@ -75,9 +81,9 @@ MANAGER_PERMISSIONS: Set[Tuple[str, str]] = OPERATOR_PERMISSIONS | {
     ("nodes", "create"), ("nodes", "delete"),
     ("hosts", "create"), ("hosts", "edit"), ("hosts", "delete"),
     ("admins", "view"),
-    ("automations", "view"), ("automations", "create"), ("automations", "edit"),
+    ("automation", "view"), ("automation", "create"), ("automation", "edit"),
     ("settings", "view"),
-    ("bulk", "execute"),
+    ("users", "bulk_operations"),
 }
 
 

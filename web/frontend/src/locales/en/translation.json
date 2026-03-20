@@ -1388,7 +1388,13 @@
       "generate_token": "Generate token",
       "revoke_token": "Revoke token",
       "restart": "Restart",
-      "resolve": "Resolve"
+      "resolve": "Resolve",
+      "terminal": "Terminal",
+      "scripts": "Scripts",
+      "view": "View",
+      "edit": "Edit",
+      "bulk_operations": "Bulk operations",
+      "run": "Run"
     },
     "resources": {
       "user": "User",

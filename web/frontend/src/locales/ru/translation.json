@@ -1388,7 +1388,13 @@
       "generate_token": "Генерация токена",
       "revoke_token": "Отзыв токена",
       "restart": "Перезапуск",
-      "resolve": "Решение"
+      "resolve": "Решение",
+      "terminal": "Терминал",
+      "scripts": "Скрипты",
+      "view": "Просмотр",
+      "edit": "Редактирование",
+      "bulk_operations": "Массовые операции",
+      "run": "Запуск"
     },
     "resources": {
       "user": "Пользователь",
