@@ -49,7 +49,7 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
   const canDelete = useHasPermission('billing', 'delete')
 
   // Tab state
-  const [activeTab, setActiveTab] = useTabParam('providers', ['providers', 'history', 'nodes'])
+  const [activeTab, setActiveTab] = useTabParam('providers', ['providers', 'history', 'nodes', 'analytics'])
 
   // ── Providers ───────────────────────────────────────────────────
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
