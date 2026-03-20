@@ -363,7 +363,7 @@ export default function Fleet() {
   const canTerminal = hasPermission('fleet', 'terminal')
   const canScripts = hasPermission('fleet', 'scripts')
 
-  const [activeTab, setActiveTab] = useTabParam('monitoring', ['monitoring', 'scripts', 'history'])
+  const [activeTab, setActiveTab] = useTabParam('monitoring', ['monitoring', 'scripts', 'history', 'scheduled', 'bulk'])
   const [sortField, setSortField] = useState<SortField>('status')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [expandedUuid, setExpandedUuid] = useState<string | null>(null)
