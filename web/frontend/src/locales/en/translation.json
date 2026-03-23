@@ -3281,7 +3281,11 @@
       "balance": "Balance",
       "subscription": "Subscription",
       "lastActivity": "Activity",
-      "noResults": "No customers found"
+      "noResults": "No customers found",
+      "subActive": "Active",
+      "subExpired": "Expired",
+      "subTrial": "Trial",
+      "subNone": "No subscription"
     },
     "customerDetail": {
       "notFound": "Customer not found",

@@ -3281,7 +3281,11 @@
       "balance": "Баланс",
       "subscription": "Подписка",
       "lastActivity": "Активность",
-      "noResults": "Клиенты не найдены"
+      "noResults": "Клиенты не найдены",
+      "subActive": "Активная",
+      "subExpired": "Истекла",
+      "subTrial": "Пробная",
+      "subNone": "Нет подписки"
     },
     "customerDetail": {
       "notFound": "Клиент не найден",
