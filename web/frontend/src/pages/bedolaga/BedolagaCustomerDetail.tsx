@@ -601,7 +601,9 @@ export default function BedolagaCustomerDetail() {
                   {transactions.map((tx: any) => {
                     const TxIcon = txTypeIcons[tx.type] || ArrowRightLeft
                     const colorClass = txTypeColors[tx.type] || txTypeColors.transfer
-                    const isPositive = (tx.amount_kopeks ?? 0) > 0
+                    const expenseTypes = new Set(['purchase', 'subscription', 'withdrawal', 'extend', 'renewal', 'prolongation'])
+                    const isExpense = expenseTypes.has(tx.type)
+                    const isIncome = !isExpense && (tx.amount_kopeks ?? 0) > 0
                     return (
                       <div key={tx.id} className="flex items-center gap-2.5 py-2 border-b border-[var(--glass-border)] last:border-0 group hover:bg-[var(--glass-bg)] rounded px-1.5 -mx-1.5 transition-colors">
                         {/* Icon */}
@@ -612,8 +614,8 @@ export default function BedolagaCustomerDetail() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-medium truncate">{tx.type}</span>
-                            <span className={cn('text-xs font-bold tabular-nums', isPositive ? 'text-emerald-400' : 'text-red-400')}>
-                              {isPositive ? '+' : ''}{tx.amount_rubles?.toLocaleString()} ₽
+                            <span className={cn('text-xs font-bold tabular-nums', isIncome ? 'text-emerald-400' : 'text-red-400')}>
+                              {isIncome ? '+' : '−'}{Math.abs(tx.amount_rubles ?? 0).toLocaleString()} ₽
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
