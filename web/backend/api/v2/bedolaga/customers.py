@@ -53,7 +53,7 @@ class DevicesAddRequest(BaseModel):
 
 @router.get("")
 async def list_users(
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=200),
     offset: int = Query(0, ge=0),
     status: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
@@ -90,21 +90,6 @@ async def list_transactions(
         limit=limit, offset=offset, user_id=user_id,
         transaction_type=transaction_type, payment_method=payment_method,
         is_completed=is_completed, date_from=date_from, date_to=date_to,
-    ))
-
-
-# ── Subscription Events (static path — before /{user_id}) ──
-
-@router.get("/events")
-async def list_events(
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    user_id: Optional[int] = Query(None),
-    admin: AdminUser = Depends(require_permission("bedolaga_customers", "view")),
-):
-    """События подписок (аудит)."""
-    return await proxy_request(lambda: bedolaga_client.list_subscription_events(
-        limit=limit, offset=offset, user_id=user_id,
     ))
 
 

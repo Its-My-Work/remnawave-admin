@@ -159,13 +159,6 @@ export default function BedolagaCustomerDetail() {
     staleTime: 30_000,
   })
 
-  const { data: eventsData } = useQuery({
-    queryKey: ['bedolaga-customer-events', id],
-    queryFn: () => client.get(`/bedolaga/customers/events?user_id=${id}&limit=10`).then((r) => r.data),
-    enabled: !!id,
-    staleTime: 30_000,
-  })
-
   // Find users referred by this user — fetch all and filter by referred_by_id
   const { data: referralsData } = useQuery({
     queryKey: ['bedolaga-customer-referrals', user?.id],
@@ -316,7 +309,7 @@ export default function BedolagaCustomerDetail() {
 
   const sub = user.subscription
   const transactions = Array.isArray(txData?.items) ? txData.items : []
-  const events = Array.isArray(eventsData?.items) ? eventsData.items : []
+  // events removed — Bedolaga webapi doesn't have this endpoint
   const referrals = Array.isArray(referralsData?.items) ? referralsData.items : []
   const online = isOnline(user.last_activity)
   const balance = user.balance_rubles ?? 0
@@ -656,27 +649,6 @@ export default function BedolagaCustomerDetail() {
             </CardContent>
           </Card>
 
-          {/* Subscription events */}
-          {events.length > 0 && (
-            <Card className="glass-card">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-cyan-400" />
-                  {t('bedolaga.customerDetail.events')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="space-y-1 max-h-[200px] overflow-y-auto pr-1">
-                  {events.map((ev: any) => (
-                    <div key={ev.id} className="flex items-center justify-between py-1.5 border-b border-[var(--glass-border)] last:border-0 text-xs">
-                      <span className="text-dark-200">{ev.event_type || ev.type}</span>
-                      <span className="text-dark-400">{formatDateShort(ev.created_at)}</span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
 
