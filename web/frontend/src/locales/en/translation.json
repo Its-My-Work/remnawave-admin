@@ -3338,13 +3338,16 @@
       "refGraphUsers": "Users",
       "refGraphReferrers": "Referrers",
       "refLegendTitle": "Subscription",
-      "refLegend.paidActive": "Paid subscription",
-      "refLegend.trial": "Trial",
-      "refLegend.paidExpired": "Paid expired",
-      "refLegend.trialExpired": "Trial expired",
-      "refLegend.topReferrer": "Top referrer (10+)",
-      "refLegend.activeReferrer": "Active referrer",
-      "refLegend.noSub": "No subscription"
+      "refLegend": {
+        "paidActive": "Paid subscription",
+        "trial": "Trial",
+        "paidExpired": "Paid expired",
+        "trialExpired": "Trial expired",
+        "partner": "Partner",
+        "topReferrer": "Top referrer (10+)",
+        "activeReferrer": "Active referrer",
+        "noSub": "No subscription"
+      }
     },
     "trial": "Trial",
     "conversions": "Conversions",

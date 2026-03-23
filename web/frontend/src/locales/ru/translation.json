@@ -3338,13 +3338,16 @@
       "refGraphUsers": "Пользователей",
       "refGraphReferrers": "Рефереров",
       "refLegendTitle": "Подписка",
-      "refLegend.paidActive": "Платная подписка",
-      "refLegend.trial": "Триал",
-      "refLegend.paidExpired": "Платная истекла",
-      "refLegend.trialExpired": "Триал истёк",
-      "refLegend.topReferrer": "Топ-реферер (10+)",
-      "refLegend.activeReferrer": "Активный реферер",
-      "refLegend.noSub": "Без подписки"
+      "refLegend": {
+        "paidActive": "Платная подписка",
+        "trial": "Триал",
+        "paidExpired": "Платная истекла",
+        "trialExpired": "Триал истёк",
+        "partner": "Партнёр",
+        "topReferrer": "Топ-реферер (10+)",
+        "activeReferrer": "Активный реферер",
+        "noSub": "Без подписки"
+      }
     },
     "trial": "Пробных",
     "conversions": "Конверсий",

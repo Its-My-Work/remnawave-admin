@@ -73,6 +73,7 @@ const LEGEND: { type: SubType; labelKey: string }[] = [
   { type: 'top_referrer',    labelKey: 'refLegend.topReferrer' },
   { type: 'active_referrer', labelKey: 'refLegend.activeReferrer' },
   { type: 'no_sub',          labelKey: 'refLegend.noSub' },
+  // partner not in SubType but shown in page-level legend
 ]
 
 // ── Layout ──
