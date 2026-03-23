@@ -34,7 +34,7 @@ violation_detector = IntelligentViolationDetector(db_service, connection_monitor
 _violation_check_cooldown: dict[str, datetime] = {}
 _cooldown_lock = asyncio.Lock()
 VIOLATION_CHECK_COOLDOWN_MINUTES = 15
-MAX_COOLDOWN_SIZE = 10000
+MAX_COOLDOWN_SIZE = 100000
 
 # Periodic cleanup of old violations
 _last_violation_cleanup: datetime = datetime.min
@@ -53,19 +53,25 @@ _violation_semaphore = asyncio.Semaphore(3)
 # and drain them in a single background worker. No data is ever dropped.
 _pending_violation_users: set = set()
 _violation_worker_task: Optional[asyncio.Task] = None
-_VIOLATION_DRAIN_INTERVAL = 5.0  # seconds between drain cycles
+_VIOLATION_DRAIN_INTERVAL = 3.0  # seconds between drain cycles
+_VIOLATION_CHUNK_SIZE = 200      # max users per drain cycle
 
 async def _violation_worker():
-    """Single long-lived worker that drains _pending_violation_users."""
+    """Single long-lived worker that drains _pending_violation_users in chunks."""
     while True:
         try:
             await asyncio.sleep(_VIOLATION_DRAIN_INTERVAL)
             if not _pending_violation_users:
                 continue
 
-            # Atomically grab all pending UUIDs
-            batch = set(_pending_violation_users)
-            _pending_violation_users.clear()
+            # Take only a chunk, leave the rest for next cycle
+            batch = set()
+            while _pending_violation_users and len(batch) < _VIOLATION_CHUNK_SIZE:
+                batch.add(_pending_violation_users.pop())
+
+            remaining = len(_pending_violation_users)
+            if remaining > 0:
+                logger.info("Violation queue: processing %d, %d remaining", len(batch), remaining)
 
             await _run_violation_detection(batch)
         except asyncio.CancelledError:
@@ -756,57 +762,59 @@ async def _check_single_user(user_uuid: str, min_score: float, sem: asyncio.Sema
 
 
 async def _run_violation_detection(affected_user_uuids: set):
-    """Background task: check affected users for violations (parallel with semaphore)."""
-    async with _violation_semaphore:
-        try:
-            violations_enabled = config_service.get("violations_enabled", True)
-            if not violations_enabled:
-                return
+    """Background task: check affected users for violations."""
+    try:
+        violations_enabled = config_service.get("violations_enabled", True)
+        if not violations_enabled:
+            return
 
-            min_score = config_service.get("violations_min_score", 50.0)
+        min_score = config_service.get("violations_min_score", 50.0)
 
-            # Cleanup stale cooldown entries (older than 1h)
-            now_cleanup = datetime.utcnow()
-            expired_keys = [k for k, v in _violation_check_cooldown.items()
-                           if (now_cleanup - v).total_seconds() > 3600]
-            for k in expired_keys:
-                del _violation_check_cooldown[k]
-            if expired_keys:
-                logger.debug("Cooldown cleanup: removed %d expired entries, %d remaining",
-                             len(expired_keys), len(_violation_check_cooldown))
+        # Cleanup stale cooldown entries (older than 1h)
+        now_cleanup = datetime.utcnow()
+        expired_keys = [k for k, v in _violation_check_cooldown.items()
+                       if (now_cleanup - v).total_seconds() > 3600]
+        for k in expired_keys:
+            del _violation_check_cooldown[k]
+        if expired_keys:
+            logger.debug("Cooldown cleanup: removed %d expired entries, %d remaining",
+                         len(expired_keys), len(_violation_check_cooldown))
 
-            # Adaptive concurrency and cooldown based on total tracked users
-            total_tracked = len(_violation_check_cooldown) + len(affected_user_uuids)
-            if total_tracked > 10000:
-                max_concurrent = 3
-                adaptive_cooldown = 30
-            elif total_tracked > 5000:
-                max_concurrent = 5
-                adaptive_cooldown = 15
-            elif total_tracked > 1000:
-                max_concurrent = 7
-                adaptive_cooldown = 10
-            else:
-                max_concurrent = 10
-                adaptive_cooldown = None  # use config default
+        # Adaptive concurrency and cooldown based on total tracked users
+        total_tracked = len(_violation_check_cooldown) + len(affected_user_uuids)
+        if total_tracked > 50000:
+            max_concurrent = 20
+            adaptive_cooldown = 60  # 1h cooldown at 50k+ scale
+        elif total_tracked > 10000:
+            max_concurrent = 15
+            adaptive_cooldown = 30
+        elif total_tracked > 5000:
+            max_concurrent = 12
+            adaptive_cooldown = 20
+        elif total_tracked > 1000:
+            max_concurrent = 10
+            adaptive_cooldown = 15
+        else:
+            max_concurrent = 10
+            adaptive_cooldown = None  # use config default
 
-            user_sem = asyncio.Semaphore(max_concurrent)
-            await asyncio.gather(
-                *(_check_single_user(uuid, min_score, user_sem, adaptive_cooldown) for uuid in affected_user_uuids),
-                return_exceptions=True,
-            )
+        user_sem = asyncio.Semaphore(max_concurrent)
+        await asyncio.gather(
+            *(_check_single_user(uuid, min_score, user_sem, adaptive_cooldown) for uuid in affected_user_uuids),
+            return_exceptions=True,
+        )
 
-            # Periodic cleanup of old violations
-            global _last_violation_cleanup
-            if (datetime.utcnow() - _last_violation_cleanup).total_seconds() > 3600:
-                retention_days = config_service.get("violation_retention_days", 90)
-                cleaned = await db_service.cleanup_old_violations(retention_days)
-                if cleaned:
-                    logger.info("Cleaned up %d old violations (retention: %d days)", cleaned, retention_days)
-                _last_violation_cleanup = datetime.utcnow()
+        # Periodic cleanup of old violations
+        global _last_violation_cleanup
+        if (datetime.utcnow() - _last_violation_cleanup).total_seconds() > 3600:
+            retention_days = config_service.get("violation_retention_days", 90)
+            cleaned = await db_service.cleanup_old_violations(retention_days)
+            if cleaned:
+                logger.info("Cleaned up %d old violations (retention: %d days)", cleaned, retention_days)
+            _last_violation_cleanup = datetime.utcnow()
 
-        except Exception as e:
-            logger.error("Background violation detection failed: %s", e)
+    except Exception as e:
+        logger.error("Background violation detection failed: %s", e)
 
 
 @router.get("/health")
