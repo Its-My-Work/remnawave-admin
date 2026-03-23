@@ -3395,7 +3395,14 @@
       "uniqueUsers": "Unique users",
       "totalDiscount": "Total discount",
       "conversions": "Conversions",
-      "noStats": "No statistics available"
+      "noStats": "No statistics available",
+      "todayUses": "Today",
+      "recentUses": "Recent uses",
+      "promoType": "Type",
+      "typeBalance": "Balance bonus",
+      "typeSubscription": "Subscription",
+      "typeMixed": "Mixed",
+      "balanceBonus": "Bonus (kopeks)"
     },
     "marketing": {
       "title": "Marketing",

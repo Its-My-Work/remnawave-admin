@@ -33,35 +33,32 @@ import { toast } from 'sonner'
 interface Promo {
   id: number
   code: string
-  discount_percent?: number
-  discount_amount_kopeks?: number
-  bonus_days?: number
-  bonus_traffic_gb?: number
+  type?: string
+  balance_bonus_kopeks?: number
+  balance_bonus_rubles?: number
+  subscription_days?: number
   max_uses?: number
-  used_count?: number
+  current_uses?: number
+  uses_left?: number
   is_active?: boolean
-  expires_at?: string
-  description?: string
+  is_valid?: boolean
+  valid_from?: string
+  valid_until?: string | null
   created_at?: string
-}
-
-interface PromoStats {
+  // Detail fields
   total_uses?: number
-  unique_users?: number
-  total_discount_kopeks?: number
-  conversions?: number
+  today_uses?: number
+  recent_uses?: Array<{ id: number; user_id: number; user_username?: string; user_full_name?: string; used_at: string }>
 }
 
 const emptyForm = {
   code: '',
-  discount_percent: '',
-  discount_amount_kopeks: '',
-  bonus_days: '',
-  bonus_traffic_gb: '',
-  max_uses: '',
-  expires_at: '',
+  type: 'balance',
+  balance_bonus_kopeks: '',
+  subscription_days: '',
+  max_uses: '1',
+  valid_until: '',
   is_active: true,
-  description: '',
 }
 
 export default function BedolagaPromo() {
@@ -163,27 +160,22 @@ export default function BedolagaPromo() {
     setEditingPromo(promo)
     setForm({
       code: promo.code,
-      discount_percent: promo.discount_percent?.toString() || '',
-      discount_amount_kopeks: promo.discount_amount_kopeks?.toString() || '',
-      bonus_days: promo.bonus_days?.toString() || '',
-      bonus_traffic_gb: promo.bonus_traffic_gb?.toString() || '',
-      max_uses: promo.max_uses?.toString() || '',
-      expires_at: promo.expires_at?.slice(0, 16) || '',
+      type: promo.type || 'balance',
+      balance_bonus_kopeks: promo.balance_bonus_kopeks?.toString() || '',
+      subscription_days: promo.subscription_days?.toString() || '',
+      max_uses: promo.max_uses?.toString() || '1',
+      valid_until: promo.valid_until?.slice(0, 16) || '',
       is_active: promo.is_active ?? true,
-      description: promo.description || '',
     })
     setDialogOpen(true)
   }
 
   const handleSubmit = () => {
-    const payload: Record<string, unknown> = { code: form.code }
-    if (form.discount_percent) payload.discount_percent = parseInt(form.discount_percent)
-    if (form.discount_amount_kopeks) payload.discount_amount_kopeks = parseInt(form.discount_amount_kopeks)
-    if (form.bonus_days) payload.bonus_days = parseInt(form.bonus_days)
-    if (form.bonus_traffic_gb) payload.bonus_traffic_gb = parseFloat(form.bonus_traffic_gb)
+    const payload: Record<string, unknown> = { code: form.code, type: form.type }
+    if (form.balance_bonus_kopeks) payload.balance_bonus_kopeks = parseInt(form.balance_bonus_kopeks)
+    if (form.subscription_days) payload.subscription_days = parseInt(form.subscription_days)
     if (form.max_uses) payload.max_uses = parseInt(form.max_uses)
-    if (form.expires_at) payload.expires_at = form.expires_at
-    if (form.description) payload.description = form.description
+    if (form.valid_until) payload.valid_until = form.valid_until
     payload.is_active = form.is_active
 
     if (editingPromo) {
@@ -314,23 +306,20 @@ export default function BedolagaPromo() {
                           {promo.is_active ? t('bedolaga.promo.active') : t('bedolaga.promo.inactive')}
                         </Badge>
                       </div>
-                      {promo.description && <p className="text-xs text-dark-300 mt-0.5">{promo.description}</p>}
+                      {promo.type && <p className="text-xs text-dark-400 mt-0.5">{promo.type}</p>}
                     </td>
-                    <td className="p-3 hidden sm:table-cell">
-                      {promo.discount_percent ? `${promo.discount_percent}%` : promo.discount_amount_kopeks ? formatRubles(promo.discount_amount_kopeks) : '—'}
+                    <td className="p-3 hidden sm:table-cell text-xs">
+                      {promo.balance_bonus_kopeks ? formatRubles(promo.balance_bonus_kopeks) : '—'}
                     </td>
                     <td className="p-3 hidden md:table-cell text-xs">
-                      {promo.bonus_days ? `+${promo.bonus_days} ${t('bedolaga.promo.days')}` : ''}
-                      {promo.bonus_days && promo.bonus_traffic_gb ? ', ' : ''}
-                      {promo.bonus_traffic_gb ? `+${promo.bonus_traffic_gb} GB` : ''}
-                      {!promo.bonus_days && !promo.bonus_traffic_gb && '—'}
+                      {promo.subscription_days ? `+${promo.subscription_days} ${t('bedolaga.promo.days')}` : '—'}
                     </td>
                     <td className="p-3 text-center hidden lg:table-cell">
-                      <span className="font-medium">{promo.used_count ?? 0}</span>
-                      {promo.max_uses && <span className="text-dark-400">/{promo.max_uses}</span>}
+                      <span className="font-medium">{promo.current_uses ?? 0}</span>
+                      <span className="text-dark-400">/{promo.max_uses ?? '∞'}</span>
                     </td>
                     <td className="p-3 hidden lg:table-cell text-dark-300 text-xs">
-                      {formatDate(promo.expires_at)}
+                      {formatDate(promo.valid_until ?? undefined)}
                     </td>
                     <td className="p-3 text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -389,46 +378,36 @@ export default function BedolagaPromo() {
                 className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/50"
               />
             </div>
+            <div>
+              <label className="block text-xs text-dark-200 mb-1">{t('bedolaga.promo.promoType')}</label>
+              <select
+                value={form.type}
+                onChange={(e) => setForm({ ...form, type: e.target.value })}
+                className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+              >
+                <option value="balance">{t('bedolaga.promo.typeBalance')}</option>
+                <option value="subscription">{t('bedolaga.promo.typeSubscription')}</option>
+                <option value="mixed">{t('bedolaga.promo.typeMixed')}</option>
+              </select>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-dark-200 mb-1">{t('bedolaga.promo.discountPercent')}</label>
-                <input
-                  type="number" min="0" max="100"
-                  value={form.discount_percent}
-                  onChange={(e) => setForm({ ...form, discount_percent: e.target.value })}
-                  placeholder="0"
-                  className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-dark-200 mb-1">{t('bedolaga.promo.discountAmount')}</label>
+                <label className="block text-xs text-dark-200 mb-1">{t('bedolaga.promo.balanceBonus')}</label>
                 <input
                   type="number" min="0"
-                  value={form.discount_amount_kopeks}
-                  onChange={(e) => setForm({ ...form, discount_amount_kopeks: e.target.value })}
+                  value={form.balance_bonus_kopeks}
+                  onChange={(e) => setForm({ ...form, balance_bonus_kopeks: e.target.value })}
                   placeholder={t('bedolaga.promo.inKopeks')}
                   className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                 />
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-dark-200 mb-1">{t('bedolaga.promo.bonusDays')}</label>
                 <input
                   type="number" min="0"
-                  value={form.bonus_days}
-                  onChange={(e) => setForm({ ...form, bonus_days: e.target.value })}
+                  value={form.subscription_days}
+                  onChange={(e) => setForm({ ...form, subscription_days: e.target.value })}
                   placeholder="0"
-                  className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-dark-200 mb-1">{t('bedolaga.promo.bonusTraffic')}</label>
-                <input
-                  type="number" min="0" step="0.1"
-                  value={form.bonus_traffic_gb}
-                  onChange={(e) => setForm({ ...form, bonus_traffic_gb: e.target.value })}
-                  placeholder="0 GB"
                   className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                 />
               </div>
@@ -440,7 +419,7 @@ export default function BedolagaPromo() {
                   type="number" min="0"
                   value={form.max_uses}
                   onChange={(e) => setForm({ ...form, max_uses: e.target.value })}
-                  placeholder={t('bedolaga.promo.unlimited')}
+                  placeholder="1"
                   className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                 />
               </div>
@@ -448,20 +427,11 @@ export default function BedolagaPromo() {
                 <label className="block text-xs text-dark-200 mb-1">{t('bedolaga.promo.expiresAt')}</label>
                 <input
                   type="datetime-local"
-                  value={form.expires_at}
-                  onChange={(e) => setForm({ ...form, expires_at: e.target.value })}
+                  value={form.valid_until}
+                  onChange={(e) => setForm({ ...form, valid_until: e.target.value })}
                   className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-xs text-dark-200 mb-1">{t('bedolaga.promo.description')}</label>
-              <input
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder={t('bedolaga.promo.descriptionPlaceholder')}
-                className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-              />
             </div>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -510,26 +480,32 @@ export default function BedolagaPromo() {
             <div className="space-y-3 py-4">
               <Skeleton className="h-5 w-full" />
               <Skeleton className="h-5 w-3/4" />
-              <Skeleton className="h-5 w-1/2" />
             </div>
           ) : statsData ? (
-            <div className="grid grid-cols-2 gap-3 py-4">
-              <div className="p-3 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)]">
-                <p className="text-xs text-dark-300">{t('bedolaga.promo.totalUses')}</p>
-                <p className="text-lg font-semibold">{(statsData as PromoStats).total_uses ?? 0}</p>
+            <div className="space-y-3 py-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)]">
+                  <p className="text-xs text-dark-300">{t('bedolaga.promo.totalUses')}</p>
+                  <p className="text-lg font-semibold">{(statsData as Promo).total_uses ?? (statsData as Promo).current_uses ?? 0}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)]">
+                  <p className="text-xs text-dark-300">{t('bedolaga.promo.todayUses')}</p>
+                  <p className="text-lg font-semibold">{(statsData as Promo).today_uses ?? 0}</p>
+                </div>
               </div>
-              <div className="p-3 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)]">
-                <p className="text-xs text-dark-300">{t('bedolaga.promo.uniqueUsers')}</p>
-                <p className="text-lg font-semibold">{(statsData as PromoStats).unique_users ?? 0}</p>
-              </div>
-              <div className="p-3 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)]">
-                <p className="text-xs text-dark-300">{t('bedolaga.promo.totalDiscount')}</p>
-                <p className="text-lg font-semibold">{formatRubles((statsData as PromoStats).total_discount_kopeks)}</p>
-              </div>
-              <div className="p-3 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)]">
-                <p className="text-xs text-dark-300">{t('bedolaga.promo.conversions')}</p>
-                <p className="text-lg font-semibold">{(statsData as PromoStats).conversions ?? 0}</p>
-              </div>
+              {Array.isArray((statsData as Promo).recent_uses) && (statsData as Promo).recent_uses!.length > 0 && (
+                <div>
+                  <p className="text-xs text-dark-300 mb-2">{t('bedolaga.promo.recentUses')}</p>
+                  <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                    {(statsData as Promo).recent_uses!.map((use) => (
+                      <div key={use.id} className="flex items-center justify-between py-1.5 border-b border-[var(--glass-border)] last:border-0 text-xs">
+                        <span className="font-medium">{use.user_username || use.user_full_name || `#${use.user_id}`}</span>
+                        <span className="text-dark-400">{formatDate(use.used_at)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-dark-300 py-4">{t('bedolaga.promo.noStats')}</p>

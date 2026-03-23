@@ -3395,7 +3395,14 @@
       "uniqueUsers": "Уникальных польз.",
       "totalDiscount": "Общая скидка",
       "conversions": "Конверсий",
-      "noStats": "Нет данных по статистике"
+      "noStats": "Нет данных по статистике",
+      "todayUses": "Сегодня",
+      "recentUses": "Последние использования",
+      "promoType": "Тип",
+      "typeBalance": "Бонус баланса",
+      "typeSubscription": "Подписка",
+      "typeMixed": "Смешанный",
+      "balanceBonus": "Бонус (копейки)"
     },
     "marketing": {
       "title": "Маркетинг",

@@ -143,22 +143,24 @@ class BedolagaClient:
     async def list_promos(self, limit: int = 20, offset: int = 0, **filters) -> dict:
         params = {"limit": limit, "offset": offset}
         params.update({k: v for k, v in filters.items() if v is not None})
-        return await self._get("/promos", params=params)
+        return await self._get("/promo-codes", params=params)
 
     async def get_promo(self, promo_id: int) -> dict:
-        return await self._get(f"/promos/{promo_id}")
+        """Get promo detail with usage stats (total_uses, today_uses, recent_uses)."""
+        return await self._get(f"/promo-codes/{promo_id}")
 
     async def create_promo(self, data: dict) -> dict:
-        return await self._post("/promos", json=data)
+        return await self._post("/promo-codes", json=data)
 
     async def update_promo(self, promo_id: int, data: dict) -> dict:
-        return await self._patch(f"/promos/{promo_id}", json=data)
+        return await self._patch(f"/promo-codes/{promo_id}", json=data)
 
     async def delete_promo(self, promo_id: int) -> dict:
-        return await self._delete(f"/promos/{promo_id}")
+        return await self._delete(f"/promo-codes/{promo_id}")
 
     async def get_promo_stats(self, promo_id: int) -> dict:
-        return await self._get(f"/promos/{promo_id}/stats")
+        """Detail endpoint already includes stats (total_uses, today_uses, recent_uses)."""
+        return await self._get(f"/promo-codes/{promo_id}")
 
     # ── Marketing campaigns ──
 
