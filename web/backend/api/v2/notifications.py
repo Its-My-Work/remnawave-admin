@@ -247,17 +247,19 @@ async def delete_old_notifications(
     aid = _get_admin_id(admin)
     async with db_service.acquire() as conn:
         if aid is not None:
-            count = await conn.fetchval(
-                "DELETE FROM notifications WHERE (admin_id = $1 OR admin_id IS NULL) AND created_at < NOW() - ($2 || ' days')::interval RETURNING COUNT(*)",
-                aid, str(days),
+            result = await conn.execute(
+                "DELETE FROM notifications WHERE (admin_id = $1 OR admin_id IS NULL) AND created_at < NOW() - make_interval(days => $2)",
+                aid, days,
             )
         else:
-            count = await conn.fetchval(
-                "DELETE FROM notifications WHERE admin_id IS NULL AND created_at < NOW() - ($1 || ' days')::interval RETURNING COUNT(*)",
-                str(days),
+            result = await conn.execute(
+                "DELETE FROM notifications WHERE admin_id IS NULL AND created_at < NOW() - make_interval(days => $1)",
+                days,
             )
+        # result is like "DELETE 42"
+        count = int(result.split()[-1]) if result else 0
 
-    return SuccessResponse(message=f"Deleted {count or 0} notifications")
+    return SuccessResponse(message=f"Deleted {count} notifications")
 
 
 @router.post("/notifications/create", response_model=SuccessResponse)
