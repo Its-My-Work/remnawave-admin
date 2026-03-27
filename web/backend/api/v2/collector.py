@@ -56,24 +56,52 @@ _violation_worker_task: Optional[asyncio.Task] = None
 _VIOLATION_DRAIN_INTERVAL = 3.0  # seconds between drain cycles
 _VIOLATION_CHUNK_SIZE = 200      # max users per drain cycle
 
+# ── Queue metrics ─────────────────────────────────────────
+_stats = {
+    "total_enqueued": 0,         # Total users ever enqueued
+    "total_processed": 0,        # Total users processed by worker
+    "total_violations_found": 0, # Total violations detected
+    "total_skipped_cooldown": 0, # Skipped due to cooldown
+    "total_batches_received": 0, # Total HTTP batch requests
+    "total_batches_rejected": 0, # Rate-limited batch requests
+    "total_tasks_dropped": 0,    # Background tasks dropped (torrent etc.)
+    "peak_queue_size": 0,        # Peak queue size seen
+    "last_drain_duration_ms": 0, # Last drain cycle duration
+    "worker_started_at": None,   # When worker was last started
+}
+
 async def _violation_worker():
     """Single long-lived worker that drains _pending_violation_users in chunks."""
+    import time
+    _stats["worker_started_at"] = datetime.utcnow().isoformat()
+
     while True:
         try:
-            await asyncio.sleep(_VIOLATION_DRAIN_INTERVAL)
+            # Read configurable parameters each cycle (hot-reload from settings)
+            drain_interval = config_service.get("violation_drain_interval", _VIOLATION_DRAIN_INTERVAL)
+            chunk_size = config_service.get("violation_chunk_size", _VIOLATION_CHUNK_SIZE)
+            await asyncio.sleep(drain_interval)
             if not _pending_violation_users:
                 continue
 
+            # Track peak queue size
+            queue_size = len(_pending_violation_users)
+            if queue_size > _stats["peak_queue_size"]:
+                _stats["peak_queue_size"] = queue_size
+
             # Take only a chunk, leave the rest for next cycle
             batch = set()
-            while _pending_violation_users and len(batch) < _VIOLATION_CHUNK_SIZE:
+            while _pending_violation_users and len(batch) < chunk_size:
                 batch.add(_pending_violation_users.pop())
 
             remaining = len(_pending_violation_users)
             if remaining > 0:
                 logger.info("Violation queue: processing %d, %d remaining", len(batch), remaining)
 
+            t0 = time.monotonic()
             await _run_violation_detection(batch)
+            _stats["last_drain_duration_ms"] = int((time.monotonic() - t0) * 1000)
+            _stats["total_processed"] += len(batch)
         except asyncio.CancelledError:
             break
         except Exception as e:
@@ -83,6 +111,7 @@ def _enqueue_violation_users(user_uuids: set):
     """Add users to the pending violation check queue and ensure the worker is running."""
     global _violation_worker_task
     _pending_violation_users.update(user_uuids)
+    _stats["total_enqueued"] += len(user_uuids)
 
     # Start worker if not running
     if _violation_worker_task is None or _violation_worker_task.done():
@@ -97,11 +126,13 @@ def _schedule_background_task(coro):
     done = {t for t in _background_tasks if t.done()}
     _background_tasks.difference_update(done)
 
-    if len(_background_tasks) >= _MAX_BACKGROUND_TASKS:
+    max_tasks = config_service.get("violation_max_background_tasks", _MAX_BACKGROUND_TASKS)
+    if len(_background_tasks) >= max_tasks:
         logger.warning(
             "Background task dropped: %d tasks already queued (limit %d)",
-            len(_background_tasks), _MAX_BACKGROUND_TASKS,
+            len(_background_tasks), max_tasks,
         )
+        _stats["total_tasks_dropped"] += 1
         return
 
     task = asyncio.create_task(coro)
@@ -264,8 +295,10 @@ async def receive_connections(
     now_ts = time.monotonic()
     last_ts = _node_last_batch.get(node_uuid, 0.0)
     if now_ts - last_ts < MIN_BATCH_INTERVAL:
+        _stats["total_batches_rejected"] += 1
         raise HTTPException(status_code=429, detail="Too many requests: batch interval too short")
     _node_last_batch[node_uuid] = now_ts
+    _stats["total_batches_received"] += 1
 
     node_name = await _get_node_name(node_uuid)
     logger.info(
@@ -617,6 +650,7 @@ async def _check_single_user(user_uuid: str, min_score: float, sem: asyncio.Sema
             last_check = _violation_check_cooldown.get(user_uuid)
             cooldown_minutes = cooldown_override if cooldown_override is not None else config_service.get("violation_check_cooldown_minutes", VIOLATION_CHECK_COOLDOWN_MINUTES)
             if last_check and (now_check - last_check).total_seconds() < cooldown_minutes * 60:
+                _stats["total_skipped_cooldown"] += 1
                 return
 
             stats = await connection_monitor.get_user_connection_stats(user_uuid, window_minutes=60)
@@ -633,6 +667,30 @@ async def _check_single_user(user_uuid: str, min_score: float, sem: asyncio.Sema
 
             had_violation = bool(violation_score and violation_score.total >= min_score)
 
+            # ── HWID Blacklist check ──
+            try:
+                user_devices = await db_service.get_user_hwid_devices(user_uuid)
+                if user_devices:
+                    user_hwids = [d["hwid"] for d in user_devices if d.get("hwid")]
+                    if user_hwids:
+                        bl_matches = await db_service.check_hwids_against_blacklist(user_hwids)
+                        if bl_matches:
+                            from web.backend.api.v2.violations import _handle_blacklisted_hwid_users
+                            # Process ALL matched HWIDs (prioritize block over alert)
+                            bl_matches.sort(key=lambda m: 0 if m["action"] == "block" else 1)
+                            for match in bl_matches:
+                                user_entry = [{"user_uuid": user_uuid, "username": None}]
+                                await _handle_blacklisted_hwid_users(
+                                    match["hwid"],
+                                    match["action"],
+                                    match.get("reason"),
+                                    user_entry,
+                                )
+                                if match["action"] == "block":
+                                    break  # Already blocked, no need to process more
+            except Exception as e:
+                logger.debug("HWID blacklist check failed for %s: %s", user_uuid, e)
+
             # Evict oldest 20% entries if cooldown dict is too large
             if len(_violation_check_cooldown) > MAX_COOLDOWN_SIZE:
                 sorted_keys = sorted(_violation_check_cooldown, key=_violation_check_cooldown.get)
@@ -645,6 +703,7 @@ async def _check_single_user(user_uuid: str, min_score: float, sem: asyncio.Sema
             _violation_check_cooldown[user_uuid] = datetime.utcnow() if not had_violation else (datetime.utcnow() - timedelta(minutes=max(0, cooldown_minutes - 5)))
 
             if had_violation:
+                _stats["total_violations_found"] += 1
                 logger.warning(
                     "Violation detected: user=%s score=%.1f action=%s reasons=%s",
                     user_uuid, violation_score.total,
@@ -823,4 +882,68 @@ async def collector_health():
     return JSONResponse(
         status_code=200,
         content={"status": "ok", "service": "collector", "database_connected": db_service.is_connected},
+    )
+
+
+@router.get("/stats")
+async def collector_stats(request: Request):
+    """Collector pipeline metrics — queue depth, processing rates, bottleneck indicators.
+
+    Requires admin JWT token (not agent token) for security.
+    """
+    # Verify admin auth (collector endpoints skip middleware, so check manually)
+    from web.backend.core.security import decode_token
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return JSONResponse(status_code=401, content={"detail": "Authentication required"})
+    payload = decode_token(auth_header[7:], token_type="access")
+    if not payload:
+        return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
+    queue_size = len(_pending_violation_users)
+    cooldown_size = len(_violation_check_cooldown)
+    bg_tasks = len({t for t in _background_tasks if not t.done()})
+
+    # Determine queue health
+    if queue_size == 0:
+        queue_health = "idle"
+    elif queue_size < 500:
+        queue_health = "ok"
+    elif queue_size < 2000:
+        queue_health = "busy"
+    else:
+        queue_health = "overloaded"
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "queue": {
+                "pending_users": queue_size,
+                "peak_queue_size": _stats["peak_queue_size"],
+                "health": queue_health,
+            },
+            "processing": {
+                "total_enqueued": _stats["total_enqueued"],
+                "total_processed": _stats["total_processed"],
+                "total_violations_found": _stats["total_violations_found"],
+                "total_skipped_cooldown": _stats["total_skipped_cooldown"],
+                "last_drain_duration_ms": _stats["last_drain_duration_ms"],
+                "backlog": _stats["total_enqueued"] - _stats["total_processed"],
+            },
+            "input": {
+                "total_batches_received": _stats["total_batches_received"],
+                "total_batches_rejected": _stats["total_batches_rejected"],
+            },
+            "background_tasks": {
+                "active": bg_tasks,
+                "dropped": _stats["total_tasks_dropped"],
+            },
+            "cooldown_cache_size": cooldown_size,
+            "config": {
+                "drain_interval_sec": config_service.get("violation_drain_interval", _VIOLATION_DRAIN_INTERVAL),
+                "chunk_size": config_service.get("violation_chunk_size", _VIOLATION_CHUNK_SIZE),
+                "cooldown_minutes": config_service.get("violations_check_cooldown_minutes", VIOLATION_CHECK_COOLDOWN_MINUTES),
+                "max_background_tasks": config_service.get("violation_max_background_tasks", _MAX_BACKGROUND_TASKS),
+            },
+            "worker_started_at": _stats["worker_started_at"],
+        },
     )

@@ -26,6 +26,8 @@ class ErrorCode(str, Enum):
     PASSWORD_UPDATE_FAILED = "PASSWORD_UPDATE_FAILED"
     INVALID_USERNAME = "INVALID_USERNAME"
     FORBIDDEN = "FORBIDDEN"
+    EMAIL_NOT_CONFIGURED = "EMAIL_NOT_CONFIGURED"
+    RESET_TOKEN_INVALID = "RESET_TOKEN_INVALID"
 
     # ── Admins ────────────────────────────────────────────────
     USERNAME_EXISTS = "USERNAME_EXISTS"
@@ -117,6 +119,12 @@ class ErrorCode(str, Enum):
     IMPORT_FAILED = "IMPORT_FAILED"
     INVALID_FILENAME = "INVALID_FILENAME"
 
+    # ── Blocked IPs ──────────────────────────────────────────
+    BLOCKED_IP_NOT_FOUND = "BLOCKED_IP_NOT_FOUND"
+    BLOCKED_IP_DUPLICATE = "BLOCKED_IP_DUPLICATE"
+    BLOCKED_IP_INVALID_CIDR = "BLOCKED_IP_INVALID_CIDR"
+    BLOCKED_IP_ADD_FAILED = "BLOCKED_IP_ADD_FAILED"
+
     # ── Generic ───────────────────────────────────────────────
     NO_FIELDS_TO_UPDATE = "NO_FIELDS_TO_UPDATE"
     API_SERVICE_UNAVAILABLE = "API_SERVICE_UNAVAILABLE"
@@ -147,6 +155,10 @@ _DEFAULT_MESSAGES: dict[str, str] = {
     E.DOMAIN_NOT_FOUND: "Domain not found",
     E.REPORT_NOT_FOUND: "Report not found",
     E.ASN_NOT_FOUND: "ASN not found",
+    E.BLOCKED_IP_NOT_FOUND: "Blocked IP not found",
+    E.BLOCKED_IP_DUPLICATE: "IP already blocked",
+    E.BLOCKED_IP_INVALID_CIDR: "Invalid IP or CIDR notation",
+    E.BLOCKED_IP_ADD_FAILED: "Failed to add blocked IP",
     E.BACKUP_NOT_FOUND: "Backup file not found",
     E.BACKUP_CREATE_FAILED: "Failed to create backup",
     E.BACKUP_RESTORE_FAILED: "Failed to restore backup",

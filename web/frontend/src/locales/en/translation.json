@@ -104,6 +104,7 @@
     "fleet": "Fleet",
     "hosts": "Hosts",
     "violations": "Violations",
+    "blockedIPs": "Blocked IPs",
     "automations": "Automations",
     "notifications": "Notifications",
     "admins": "Admins & Roles",
@@ -193,6 +194,7 @@
     "title": "Panel Login",
     "subtitle": "Administration control panel",
     "loginButton": "Log in",
+    "forgotPassword": "Forgot password?",
     "loggingIn": "Logging in...",
     "telegram": "Log in with Telegram",
     "password": "Log in with password",
@@ -213,7 +215,8 @@
       "lower": "Lowercase (a-z)",
       "upper": "Uppercase (A-Z)",
       "digit": "Digit (0-9)",
-      "special": "Special character"
+      "special": "Special character",
+      "noCyrillic": "Cyrillic characters detected — switch keyboard to EN layout"
     },
     "authorizedOnly": "For authorized administrators only",
     "passwordRequirements": "Create an admin account to get started",
@@ -274,6 +277,16 @@
     "violations": "Violations",
     "violationsSubtitle": "Today: {{today}}, this week: {{week}}",
     "violationsTooltip": "Recorded anti-abuse system violations",
+    "collectorQueue": "Violation Queue",
+    "collectorPending": "Pending",
+    "collectorProcessed": "Processed",
+    "collectorViolations": "Violations found",
+    "collectorSkipped": "Skipped (cooldown)",
+    "collectorDrainMs": "Drain time",
+    "collectorBatches": "Batches received",
+    "collectorRejected": "Batches rejected",
+    "collectorBusy": "Busy",
+    "collectorOverloaded": "Overloaded",
     "systemStatus": "System status",
     "systemStatusTooltip": "Current status of system components",
     "statusOnline": "Online",
@@ -1115,6 +1128,62 @@
       "createError": "Create error"
     }
   },
+  "blockedIPs": {
+    "title": "Blocked IPs",
+    "addIP": "Add IP",
+    "bulkBlock": "Bulk Block",
+    "sync": "Sync",
+    "empty": "No blocked IPs",
+    "forever": "Permanent",
+    "pagination": "Page {{current}} / {{total}}",
+    "addSuccess": "IP blocked",
+    "addError": "Failed to add IP",
+    "bulkSuccess": "IPs blocked",
+    "bulkError": "Bulk block failed",
+    "deleteSuccess": "Block removed",
+    "deleteError": "Failed to remove block",
+    "syncSuccess": "Blocklist synced",
+    "syncError": "Sync failed",
+    "columns": {
+      "ipCidr": "IP / CIDR",
+      "country": "Country",
+      "asnProvider": "Provider",
+      "reason": "Reason",
+      "addedBy": "Added By",
+      "created": "Date",
+      "expires": "Expires",
+      "actions": "Actions"
+    },
+    "durations": {
+      "forever": "Forever",
+      "1h": "1 hour",
+      "24h": "24 hours",
+      "7d": "7 days",
+      "30d": "30 days"
+    },
+    "addDialog": {
+      "title": "Add IP to blocklist",
+      "description": "Enter an IP address or CIDR subnet to block",
+      "ipCidr": "IP / CIDR",
+      "reason": "Reason",
+      "reasonPlaceholder": "Reason for blocking (optional)",
+      "duration": "Duration",
+      "submit": "Block"
+    },
+    "bulkDialog": {
+      "title": "Bulk Block",
+      "description": "Enter IP addresses, one per line",
+      "ips": "IP List",
+      "ipsPlaceholder": "1.2.3.4\n10.0.0.0/24\n192.168.1.0/24",
+      "reason": "Reason",
+      "duration": "Duration",
+      "submit": "Block All"
+    },
+    "deleteDialog": {
+      "title": "Remove block",
+      "description": "Remove block for {{ip}}?"
+    }
+  },
   "violations": {
     "title": "Violations",
     "subtitle": "Anti-abuse system and violation management",
@@ -1297,6 +1366,27 @@
       "userUuidPlaceholder": "Enter user UUID",
       "addTitle": "Add to whitelist",
       "expired": "Expired"
+    },
+    "hwidBlacklist": {
+      "tab": "HWID Blacklist",
+      "title": "HWID Blacklist",
+      "description": "When a blacklisted HWID is detected on a user — auto-ban or alert",
+      "add": "Add HWID",
+      "addTitle": "Add HWID to blacklist",
+      "addDescription": "Enter the device HWID and the action to take when detected",
+      "addButton": "Add to blacklist",
+      "action": "Action",
+      "actionAlert": "Alert",
+      "actionBlock": "Block",
+      "actionAlertHint": "Send notification to admin without blocking the user",
+      "actionBlockHint": "Automatically block the user via Panel API and send notification",
+      "reason": "Reason",
+      "reasonPlaceholder": "Fraud, account theft, etc.",
+      "empty": "HWID blacklist is empty",
+      "added": "HWID added to blacklist. Affected users: {{count}}",
+      "removed": "HWID removed from blacklist",
+      "affectedUsers": "Users with this HWID ({{count}})",
+      "noUsers": "No users found with this HWID"
     },
     "analyzers": {
       "temporal": "Temporal (simultaneous connections)",
@@ -2314,7 +2404,8 @@
     "subtitle": "Bot and panel configuration. Priority: DB > .env > default",
     "tabs": {
       "general": "General",
-      "resources": "Remnawave Resources"
+      "resources": "Remnawave Resources",
+      "faq": "FAQ"
     },
     "searchPlaceholder": "Search settings...",
     "foundSettings": "Found: {{count}} settings",
@@ -2322,25 +2413,80 @@
     "noSettingsHint": "Make sure the database is connected and the bot has been started at least once",
     "retry": "Retry",
     "categories": {
-      "general": "General",
-      "notifications": "Notifications",
-      "sync": "Sync",
-      "violations": "Violation Detection",
-      "reports": "Reports",
-      "collector": "Data Collector",
-      "limits": "Limits",
-      "appearance": "Appearance",
-      "mailserver": "Mail Server",
-      "security": "Security"
+      "general": "⚙️ General",
+      "notifications": "🔔 Notifications",
+      "sync": "🔄 Sync",
+      "violations": "🛡️ Violation Detection",
+      "reports": "📊 Reports",
+      "collector": "📡 Data Collector",
+      "limits": "📏 Limits",
+      "appearance": "🎨 Appearance",
+      "mailserver": "📧 Mail Server",
+      "security": "🔒 Security",
+      "performance": "⚡ Performance"
     },
     "subcategories": {
-      "topics": "Notification topics",
-      "weights": "Score component weights",
-      "thresholds": "Detection thresholds",
-      "hard_block": "Hard block",
-      "trial": "Trial user detection",
-      "auth_methods": "Auth Methods",
-      "brute_force": "Brute-Force Protection"
+      "topics": "💬 Notification topics",
+      "weights": "⚖️ Score component weights",
+      "thresholds": "📐 Detection thresholds",
+      "hard_block": "🚫 Hard block",
+      "trial": "🆓 Trial user detection",
+      "auth_methods": "🔑 Auth Methods",
+      "brute_force": "🛡️ Brute-Force Protection",
+      "database": "🗄️ Database",
+      "intervals": "⏱️ Intervals",
+      "rate_limits": "🚦 Rate Limits",
+      "cache": "💾 Cache",
+      "violation_pipeline": "🔍 Violation Detection Pipeline"
+    },
+    "faq": {
+      "description": "Frequently asked questions and solutions to common problems",
+      "items": {
+        "panelPort": {
+          "q": "Panel only opens with port :3000",
+          "a": "Reverse proxy issue (Nginx/Caddy). After server reboot, the proxy starts before containers are ready and can't resolve DNS names.\n\nFor Caddy — add lb_try_duration 30s to each reverse_proxy block:\nreverse_proxy web-frontend:80 {\n    lb_try_duration 30s\n}\n\nFor Nginx — add resolver 127.0.0.11 valid=10s to the upstream block.\n\nQuick fix: docker restart caddy (or nginx) after reboot."
+        },
+        "passwordLogin": {
+          "q": "Can't log in with password after registration",
+          "a": "Possible causes:\n1. Password contains Cyrillic look-alike characters (С instead of C, А instead of A). Switch keyboard to EN and re-enter.\n2. Browser autofilled incorrectly. Try entering manually.\n3. If nothing helps — reset via CLI:\ndocker exec -it <container> python3 scripts/admin_cli.py reset-password --username admin"
+        },
+        "highCpu": {
+          "q": "PostgreSQL using 99% CPU",
+          "a": "Check that indexes exist on frequently queried tables. Key indexes:\n- users: idx_users_username_lower, idx_users_email_lower\n- user_connections: idx_user_connections_user_active\n\nAlso configure in Performance settings:\n- DB Pool max size (default 50)\n- Statement timeout (default 60s)\n\nMonitor via: SELECT * FROM pg_stat_user_tables ORDER BY seq_scan DESC;"
+        },
+        "nodeOffline": {
+          "q": "Node shows as offline but is actually running",
+          "a": "Check:\n1. Agent is running and AGENT_COLLECTOR_URL points to web-backend (port 8081)\n2. Agent token matches the token in the panel\n3. No firewall between node and backend\n4. Server time is synchronized (NTP)"
+        },
+        "alertSpam": {
+          "q": "Alerts keep spamming about long-disconnected nodes",
+          "a": "In the alert rule settings, use the 'Ignore nodes offline longer than (min)' field. For example, set 1440 (24 hours) — nodes disconnected for more than a day won't trigger repeat alerts."
+        },
+        "dockerRestart": {
+          "q": "After docker compose up, services can't see each other",
+          "a": "Make sure the network exists:\ndocker network create remnawave-network\n\nThen:\ndocker compose down && docker compose up -d\n\nIf using multiple docker-compose files — all must use the same external network."
+        },
+        "dbPool": {
+          "q": "'Too many connections' errors in logs",
+          "a": "PostgreSQL has a connection limit (default 100). Each service (bot, backend) uses a pool.\n\nSolutions:\n1. Reduce DB Pool max size in Settings → Performance\n2. Increase max_connections in PostgreSQL:\n   ALTER SYSTEM SET max_connections = 200;\n3. Restart PostgreSQL"
+        },
+        "passwordReset": {
+          "q": "How to reset admin password?",
+          "a": "Method 1 — via email (if SMTP configured):\nOn the login page, click 'Forgot password?' and enter your email.\n\nMethod 2 — via CLI:\ndocker exec -it <container> python3 scripts/admin_cli.py reset-password --username admin\n\nMethod 3 — create new superadmin:\ndocker exec -it <container> python3 scripts/admin_cli.py create-superadmin --username newadmin"
+        },
+        "smtp": {
+          "q": "How to set up email sending?",
+          "a": "Two options:\n\n1. Built-in mail server — go to Mail Server section, add a domain, configure DNS records (MX, SPF, DKIM, DMARC).\n\n2. External SMTP relay — go to Notifications → SMTP Config and enter your SMTP server details (Gmail, Mailgun, etc.)."
+        },
+        "violationQueue": {
+          "q": "How to tell if the violation detection pipeline is keeping up?",
+          "a": "Open /api/v2/collector/stats — it shows:\n- pending_users: users waiting for check\n- health: idle/ok/busy/overloaded\n- backlog: difference between enqueued and processed\n- last_drain_duration_ms: last processing time\n\nIf health = 'overloaded' (>2000 in queue):\n1. Increase 'Chunk size' in Settings → Performance → Pipeline\n2. Decrease 'Drain interval' (e.g. from 3 to 1 sec)\n3. Increase check cooldown (Violation Detection → Cooldown)\n\nIf resources are underutilized but queue grows — increase chunk_size. If CPU is maxed — increase interval and cooldown."
+        },
+        "resourceLimits": {
+          "q": "How to limit resource consumption (CPU/RAM)?",
+          "a": "Resource limits are configured at the Docker level, not the application level.\n\nIn docker-compose.yml add:\nservices:\n  web-backend:\n    deploy:\n      resources:\n        limits:\n          cpus: '2.0'\n          memory: 1G\n        reservations:\n          cpus: '0.5'\n          memory: 256M\n\nAt the application level, configure: DB pool, sync intervals, cache size — see Performance settings."
+        }
+      }
     },
     "sync": {
       "title": "Sync",
@@ -2618,6 +2764,20 @@
       "metric": "Metric",
       "metricDisk": "Disk (%)",
       "metricNodeOffline": "Node offline (min)",
+      "metricNodesOnline": "Nodes online (count)",
+      "metricNodesOffline": "Nodes offline (count)",
+      "metricNodesTotal": "Total nodes (count)",
+      "metricDescCpu": "Maximum CPU usage across all nodes",
+      "metricDescRam": "Maximum RAM usage across all nodes",
+      "metricDescDisk": "Maximum disk usage across all nodes",
+      "metricDescNodeOffline": "Minutes since the longest-offline node stopped responding",
+      "metricDescTraffic": "Total traffic across all nodes today in GB",
+      "metricDescUsersOnline": "Total number of connected users across all nodes",
+      "metricDescNodesOnline": "Number of nodes currently online",
+      "metricDescNodesOffline": "Number of nodes currently offline",
+      "metricDescNodesTotal": "Total number of active (non-disabled) nodes",
+      "maxOfflineMinutes": "Ignore nodes offline longer than (min)",
+      "maxOfflineMinutesHint": "Skip alerts for nodes offline longer than this. Useful to stop spam about long-disconnected nodes.",
       "metricTraffic": "Traffic today (GB)",
       "metricUsersOnline": "Users online",
       "operator": "Operator",
@@ -2645,7 +2805,14 @@
       "varOperator": "Comparison operator (>, >=, <, etc.)",
       "varSeverity": "Severity level (info, warning, critical)",
       "varNodeNames": "Names of affected/offline nodes",
-      "varTimestamp": "Current UTC timestamp"
+      "varNodeIps": "IP addresses of offline nodes (comma-separated)",
+      "varIp": "IP addresses of offline nodes (alias for node_ips)",
+      "varNodesTotal": "Total number of nodes",
+      "varNodesOnline": "Number of nodes online",
+      "varNodesOffline": "Number of nodes offline",
+      "varTimestamp": "Current UTC timestamp",
+      "clickToCopy": "click to copy",
+      "copiedVar": "Copied: {{var}}"
     },
     "alertLogs": {
       "status": "Status",
@@ -3035,6 +3202,8 @@
     "PASSWORD_UPDATE_FAILED": "Failed to update password",
     "INVALID_USERNAME": "Invalid username",
     "FORBIDDEN": "Access denied",
+    "EMAIL_NOT_CONFIGURED": "Email sending is not configured",
+    "RESET_TOKEN_INVALID": "Invalid or expired password reset link",
 
     "USERNAME_EXISTS": "Username already exists",
     "CANNOT_MODIFY_SELF": "Cannot modify your own account",
@@ -3489,5 +3658,23 @@
     "description": "The page you're looking for doesn't exist or has been moved.",
     "goHome": "Go to Dashboard",
     "goBack": "Go Back"
+  },
+  "resetPassword": {
+    "title": "Reset Password",
+    "description": "Enter the email associated with your account. We'll send a password reset link.",
+    "emailPlaceholder": "admin@example.com",
+    "sendLink": "Send Reset Link",
+    "backToLogin": "Back to Login",
+    "emailSent": "Email Sent",
+    "emailSentDescription": "If this email is associated with an account, you'll receive a password reset link. Check your inbox, including spam folder.",
+    "newPasswordTitle": "New Password",
+    "newPasswordDescription": "Create a new password for your account",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm password",
+    "resetButton": "Reset Password",
+    "success": "Password Changed",
+    "successDescription": "Your password has been reset successfully. You can now log in with your new password.",
+    "goToLogin": "Go to Login",
+    "error": "An error occurred. Please try again later."
   }
 }

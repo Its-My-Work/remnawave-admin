@@ -929,7 +929,12 @@ async def _handle_user_create_callback(callback: CallbackQuery) -> None:
     if action == "expire" and len(parts) >= 3:
         try:
             days = int(parts[2])
-            data["expire_at"] = _iso_from_days(days)
+            if days == 2099:
+                # Как в Панели: текущий день/месяц, год 2099
+                now = datetime.utcnow()
+                data["expire_at"] = now.replace(year=2099, microsecond=0).isoformat() + "Z"
+            else:
+                data["expire_at"] = _iso_from_days(days)
         except ValueError:
             pass
         ctx["stage"] = "traffic"

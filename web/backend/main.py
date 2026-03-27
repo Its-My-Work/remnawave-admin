@@ -53,6 +53,7 @@ from web.backend.api.v2 import asn as asn_api
 from web.backend.api.v2 import collector as collector_api
 from web.backend.api.v2 import backup as backup_api
 from web.backend.api.v2 import api_keys as api_keys_api
+from web.backend.api.v2 import blocked_ips as blocked_ips_api
 from web.backend.api.v2 import webhooks as webhooks_api
 from web.backend.api.v2 import squads as squads_api
 from web.backend.api.v2.bedolaga import router as bedolaga_router
@@ -703,6 +704,7 @@ def create_app() -> FastAPI:
     app.include_router(collector_api.router, prefix="/api/v2/collector", tags=["collector"])
     app.include_router(backup_api.router, prefix="/api/v2/backups", tags=["backups"])
     app.include_router(api_keys_api.router, prefix="/api/v2/api-keys", tags=["api-keys"])
+    app.include_router(blocked_ips_api.router, prefix="/api/v2/blocked-ips", tags=["blocked-ips"])
     app.include_router(webhooks_api.router, prefix="/api/v2/webhooks", tags=["webhooks"])
     app.include_router(squads_api.router, prefix="/api/v2/squads", tags=["squads"])
     app.include_router(bedolaga_router, prefix="/api/v2/bedolaga", tags=["bedolaga"])

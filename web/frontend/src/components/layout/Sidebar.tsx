@@ -34,6 +34,7 @@ import {
   Ticket,
   Megaphone,
   Share2,
+  ShieldBan,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { usePermissionStore } from '../../store/permissionStore'
@@ -122,6 +123,7 @@ const navigation: NavigationEntry[] = [
   // Security
   { type: 'section', name: 'nav.sections.security' },
   { name: 'nav.violations', href: '/violations', icon: ShieldAlert, permission: { resource: 'violations', action: 'view' } },
+  { name: 'nav.blockedIPs', href: '/blocked-ips', icon: ShieldBan, permission: { resource: 'blocked_ips', action: 'view' } },
   { name: 'nav.automations', href: '/automations', icon: Zap, permission: { resource: 'automation', action: 'view' } },
   { name: 'nav.notifications', href: '/notifications', icon: BellRing, permission: { resource: 'notifications', action: 'view' } },
   { name: 'nav.mailServer', href: '/mailserver', icon: Mail, permission: { resource: 'mailserver', action: 'view' } },

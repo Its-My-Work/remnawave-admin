@@ -479,7 +479,7 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
 
             {/* Summary cards */}
             <Separator />
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="bg-[var(--glass-bg)] rounded-lg p-3 text-center">
                 <p className="text-base font-bold text-white">{formatBytes(user.used_traffic_bytes)}</p>
                 <p className="text-[11px] text-dark-200">{t('userDetail.traffic.currentPeriod')}</p>
@@ -1891,6 +1891,34 @@ export default function UserDetail() {
                   {/* Expire date */}
                   <div className="space-y-2">
                     <Label>{t('userDetail.fields.expireDate')}</Label>
+                    <div className="flex flex-wrap gap-1">
+                      {[
+                        { label: '7d', days: 7 },
+                        { label: '30d', days: 30 },
+                        { label: '90d', days: 90 },
+                        { label: '365d', days: 365 },
+                        { label: '2099', days: 0 },
+                      ].map(({ label, days }) => (
+                        <Button
+                          key={label}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => {
+                            const now = new Date()
+                            const d = days > 0
+                              ? new Date(now.getTime() + days * 86400000)
+                              : new Date(now.setFullYear(2099))
+                            const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+                              .toISOString().slice(0, 16)
+                            setEditForm({ ...editForm, expire_at: local })
+                          }}
+                        >
+                          {label === '2099' ? '♾️ 2099' : `+${label}`}
+                        </Button>
+                      ))}
+                    </div>
                     <Input
                       type="datetime-local"
                       value={editForm.expire_at}
@@ -2378,7 +2406,7 @@ export default function UserDetail() {
                   </div>
                 )}
                 {canEdit && (
-                  <div className="pt-3 border-t border-[var(--glass-border)] grid grid-cols-2 gap-2">
+                  <div className="pt-3 border-t border-[var(--glass-border)] grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -2440,7 +2468,7 @@ export default function UserDetail() {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="bg-[var(--glass-bg-hover)] rounded-lg p-3 text-center">
                     <div className="flex justify-center mb-1">
                       <AlertTriangle className="h-4 w-4 text-dark-300" />
@@ -2625,7 +2653,7 @@ export default function UserDetail() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {(['none', 'partial', 'full'] as const).map(mode => (
                 <button
                   key={mode}

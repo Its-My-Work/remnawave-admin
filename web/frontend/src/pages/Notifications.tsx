@@ -530,6 +530,7 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
     channels: rule?.channels || ['in_app'],
     is_enabled: rule?.is_enabled ?? true,
     escalation_minutes: rule?.escalation_minutes ?? 0,
+    max_offline_minutes: rule?.max_offline_minutes ?? 0,
     title_template: rule?.title_template || 'Alert: {rule_name}',
     body_template: rule?.body_template || '{metric}: {value} ({operator} {threshold})',
     topic_type: rule?.topic_type || '',
@@ -553,12 +554,15 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
   })
 
   const metrics = [
-    { value: 'cpu_usage_percent', label: 'CPU (%)' },
-    { value: 'ram_usage_percent', label: 'RAM (%)' },
-    { value: 'disk_usage_percent', label: t('notifications.alerts.metricDisk') },
-    { value: 'node_offline_minutes', label: t('notifications.alerts.metricNodeOffline') },
-    { value: 'traffic_today_gb', label: t('notifications.alerts.metricTraffic') },
-    { value: 'users_online', label: t('notifications.alerts.metricUsersOnline') },
+    { value: 'cpu_usage_percent', label: 'CPU (%)', desc: t('notifications.alerts.metricDescCpu') },
+    { value: 'ram_usage_percent', label: 'RAM (%)', desc: t('notifications.alerts.metricDescRam') },
+    { value: 'disk_usage_percent', label: t('notifications.alerts.metricDisk'), desc: t('notifications.alerts.metricDescDisk') },
+    { value: 'node_offline_minutes', label: t('notifications.alerts.metricNodeOffline'), desc: t('notifications.alerts.metricDescNodeOffline') },
+    { value: 'traffic_today_gb', label: t('notifications.alerts.metricTraffic'), desc: t('notifications.alerts.metricDescTraffic') },
+    { value: 'users_online', label: t('notifications.alerts.metricUsersOnline'), desc: t('notifications.alerts.metricDescUsersOnline') },
+    { value: 'nodes_online', label: t('notifications.alerts.metricNodesOnline'), desc: t('notifications.alerts.metricDescNodesOnline') },
+    { value: 'nodes_offline', label: t('notifications.alerts.metricNodesOffline'), desc: t('notifications.alerts.metricDescNodesOffline') },
+    { value: 'nodes_total', label: t('notifications.alerts.metricNodesTotal'), desc: t('notifications.alerts.metricDescNodesTotal') },
   ]
 
   const operators = [
@@ -571,7 +575,7 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="w-[95vw] max-w-lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? t('notifications.alerts.editRule') : t('notifications.alerts.createRule')}</DialogTitle>
         </DialogHeader>
@@ -602,10 +606,16 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {metrics.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                    <SelectItem key={m.value} value={m.value}>
+                      <span>{m.label}</span>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {(() => {
+                const desc = metrics.find(m => m.value === form.metric)?.desc
+                return desc ? <p className="text-[10px] text-dark-400 mt-1">{desc}</p> : null
+              })()}
             </div>
             <div>
               <Label>{t('notifications.alerts.operator')}</Label>
@@ -649,6 +659,19 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
               />
             </div>
           </div>
+
+          {/* Max offline minutes — only for node_offline_minutes metric */}
+          {form.metric === 'node_offline_minutes' && (
+            <div>
+              <Label>{t('notifications.alerts.maxOfflineMinutes')} (0 = {t('notifications.alerts.off')})</Label>
+              <Input
+                type="number"
+                value={form.max_offline_minutes}
+                onChange={(e) => setForm({ ...form, max_offline_minutes: parseInt(e.target.value) || 0 })}
+              />
+              <p className="text-[10px] text-dark-400 mt-1">{t('notifications.alerts.maxOfflineMinutesHint')}</p>
+            </div>
+          )}
 
           <div>
             <Label>{t('notifications.alerts.escalation')} ({t('notifications.alerts.min')}, 0 = {t('notifications.alerts.off')})</Label>
@@ -768,14 +791,19 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
                       .replace('{operator}', ({ gt: '>', gte: '>=', lt: '<', lte: '<=', eq: '=' } as Record<string, string>)[form.operator] || '>')
                       .replace('{severity}', form.severity)
                       .replace('{node_names}', 'node-01, node-02')
+                      .replace('{node_ips}', '1.2.3.4, 5.6.7.8')
+                      .replace('{ip}', '1.2.3.4, 5.6.7.8')
+                      .replace('{nodes_total}', '5')
+                      .replace('{nodes_online}', '3')
+                      .replace('{nodes_offline}', '2')
                       .replace('{timestamp}', new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC')
                     }
                   </p>
                 </div>
 
-                {/* Available variables */}
+                {/* Available variables — click to copy */}
                 <div>
-                  <p className="text-[10px] text-dark-500 mb-1">{t('notifications.alerts.templateVars')}</p>
+                  <p className="text-[10px] text-dark-500 mb-1">{t('notifications.alerts.templateVars')} <span className="text-dark-500/60">({t('notifications.alerts.clickToCopy')})</span></p>
                   <div className="flex flex-wrap gap-1">
                     {[
                       { key: '{rule_name}', hint: t('notifications.alerts.varRuleName') },
@@ -785,15 +813,25 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
                       { key: '{operator}', hint: t('notifications.alerts.varOperator') },
                       { key: '{severity}', hint: t('notifications.alerts.varSeverity') },
                       { key: '{node_names}', hint: t('notifications.alerts.varNodeNames') },
+                      { key: '{node_ips}', hint: t('notifications.alerts.varNodeIps') },
+                      { key: '{ip}', hint: t('notifications.alerts.varIp') },
+                      { key: '{nodes_total}', hint: t('notifications.alerts.varNodesTotal') },
+                      { key: '{nodes_online}', hint: t('notifications.alerts.varNodesOnline') },
+                      { key: '{nodes_offline}', hint: t('notifications.alerts.varNodesOffline') },
                       { key: '{timestamp}', hint: t('notifications.alerts.varTimestamp') },
                     ].map(({ key, hint }) => (
-                      <span
+                      <button
                         key={key}
+                        type="button"
                         title={hint}
-                        className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-mono bg-[var(--glass-bg)]/60 text-cyan-400/80 border border-[var(--glass-border)]/15 cursor-help"
+                        onClick={() => {
+                          navigator.clipboard.writeText(key)
+                          toast.success(t('notifications.alerts.copiedVar', { var: key }))
+                        }}
+                        className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-mono bg-[var(--glass-bg)]/60 text-cyan-400/80 border border-[var(--glass-border)]/15 cursor-pointer hover:bg-cyan-500/10 hover:border-cyan-500/30 transition-colors active:scale-95"
                       >
                         {key}
-                      </span>
+                      </button>
                     ))}
                   </div>
                 </div>

@@ -39,10 +39,8 @@ import { cn } from '@/lib/utils'
 
 // ── Helpers ────────────────────────────────────────────────────
 
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleString()
-}
+// Use centralized formatter for locale-aware dates
+import { formatDateUtil as formatDate } from '@/lib/useFormatters'
 
 const STATUS_BADGE: Record<string, string> = {
   pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
@@ -405,7 +403,7 @@ function DnsRecordsDialog({ domainId, onClose }: { domainId: number; onClose: ()
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="w-[95vw] max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t('mailServer.dnsRecords')}</DialogTitle>
         </DialogHeader>

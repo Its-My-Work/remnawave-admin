@@ -62,6 +62,7 @@ export interface AlertRule {
   title_template: string
   body_template: string
   topic_type: string | null
+  max_offline_minutes: number
   last_triggered_at: string | null
   last_value: number | null
   trigger_count: number

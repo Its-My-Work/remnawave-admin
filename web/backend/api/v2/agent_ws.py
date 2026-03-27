@@ -103,6 +103,19 @@ async def agent_websocket(
     await _set_agent_v2_status(node_uuid, True)
     await _broadcast_agent_status(node_uuid, True)
 
+    # Push blocked IPs to newly connected agent (always send, even if empty — clears stale rules)
+    try:
+        blocked = await db_service.get_all_active_blocked_ips()
+        from web.backend.core.agent_hmac import sign_command_with_ts
+        cmd = {"type": "sync_blocked_ips", "ips": blocked, "mode": "replace"}
+        payload, sig = sign_command_with_ts(cmd, agent_token)
+        await agent_manager.send_command(node_uuid, {
+            "type": "command", "payload": payload, "signature": sig,
+        })
+        logger.info("Pushed %d blocked IPs to agent %s", len(blocked), node_uuid)
+    except Exception as e:
+        logger.debug("Failed to push blocked IPs to agent %s: %s", node_uuid, e)
+
     try:
         while True:
             try:

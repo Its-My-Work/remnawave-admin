@@ -104,6 +104,7 @@
     "fleet": "Fleet",
     "hosts": "Хосты",
     "violations": "Нарушения",
+    "blockedIPs": "Блокировка IP",
     "automations": "Автоматизации",
     "notifications": "Уведомления",
     "admins": "Администраторы и роли",
@@ -193,6 +194,7 @@
     "title": "Вход в панель",
     "subtitle": "Административная панель управления",
     "loginButton": "Войти",
+    "forgotPassword": "Забыли пароль?",
     "loggingIn": "Вход...",
     "telegram": "Войти через Telegram",
     "password": "Войти с паролем",
@@ -213,7 +215,8 @@
       "lower": "Строчная (a-z)",
       "upper": "Заглавная (A-Z)",
       "digit": "Цифра (0-9)",
-      "special": "Спецсимвол"
+      "special": "Спецсимвол",
+      "noCyrillic": "Обнаружены кириллические символы — переключите раскладку на EN"
     },
     "authorizedOnly": "Только для авторизованных администраторов",
     "passwordRequirements": "Создайте учётную запись администратора для начала работы",
@@ -274,6 +277,16 @@
     "violations": "Нарушения",
     "violationsSubtitle": "Сегодня: {{today}}, за неделю: {{week}}",
     "violationsTooltip": "Зафиксированные нарушения анти-абуз системы",
+    "collectorQueue": "Очередь проверки",
+    "collectorPending": "В очереди",
+    "collectorProcessed": "Обработано",
+    "collectorViolations": "Нарушений найдено",
+    "collectorSkipped": "Пропущено (cooldown)",
+    "collectorDrainMs": "Время цикла",
+    "collectorBatches": "Батчей получено",
+    "collectorRejected": "Батчей отклонено",
+    "collectorBusy": "Загружена",
+    "collectorOverloaded": "Перегружена",
     "systemStatus": "Статус системы",
     "systemStatusTooltip": "Текущее состояние компонентов системы",
     "statusOnline": "Онлайн",
@@ -1115,6 +1128,62 @@
       "createError": "Ошибка создания"
     }
   },
+  "blockedIPs": {
+    "title": "Заблокированные IP",
+    "addIP": "Добавить IP",
+    "bulkBlock": "Массовая блокировка",
+    "sync": "Синхронизировать",
+    "empty": "Нет заблокированных IP",
+    "forever": "Навсегда",
+    "pagination": "Стр. {{current}} / {{total}}",
+    "addSuccess": "IP заблокирован",
+    "addError": "Ошибка добавления IP",
+    "bulkSuccess": "IP заблокированы",
+    "bulkError": "Ошибка массовой блокировки",
+    "deleteSuccess": "Блокировка удалена",
+    "deleteError": "Ошибка удаления",
+    "syncSuccess": "Блоклист синхронизирован",
+    "syncError": "Ошибка синхронизации",
+    "columns": {
+      "ipCidr": "IP / CIDR",
+      "country": "Страна",
+      "asnProvider": "Провайдер",
+      "reason": "Причина",
+      "addedBy": "Добавил",
+      "created": "Дата",
+      "expires": "Истекает",
+      "actions": "Действия"
+    },
+    "durations": {
+      "forever": "Навсегда",
+      "1h": "1 час",
+      "24h": "24 часа",
+      "7d": "7 дней",
+      "30d": "30 дней"
+    },
+    "addDialog": {
+      "title": "Добавить IP в блоклист",
+      "description": "Укажите IP-адрес или CIDR-подсеть для блокировки",
+      "ipCidr": "IP / CIDR",
+      "reason": "Причина",
+      "reasonPlaceholder": "Причина блокировки (необязательно)",
+      "duration": "Срок действия",
+      "submit": "Заблокировать"
+    },
+    "bulkDialog": {
+      "title": "Массовая блокировка",
+      "description": "Введите IP-адреса, по одному на строку",
+      "ips": "Список IP",
+      "ipsPlaceholder": "1.2.3.4\n10.0.0.0/24\n192.168.1.0/24",
+      "reason": "Причина",
+      "duration": "Срок действия",
+      "submit": "Заблокировать все"
+    },
+    "deleteDialog": {
+      "title": "Удалить блокировку",
+      "description": "Удалить блокировку для {{ip}}?"
+    }
+  },
   "violations": {
     "title": "Нарушения",
     "subtitle": "Анти-абуз система и управление нарушениями",
@@ -1297,6 +1366,27 @@
       "userUuidPlaceholder": "Введите UUID пользователя",
       "addTitle": "Добавить в whitelist",
       "expired": "Истёк"
+    },
+    "hwidBlacklist": {
+      "tab": "HWID Blacklist",
+      "title": "Чёрный список HWID",
+      "description": "При обнаружении HWID из списка у пользователя — автоматический бан или алерт",
+      "add": "Добавить HWID",
+      "addTitle": "Добавить HWID в чёрный список",
+      "addDescription": "Укажите HWID устройства и действие при обнаружении",
+      "addButton": "Добавить в blacklist",
+      "action": "Действие",
+      "actionAlert": "Алерт",
+      "actionBlock": "Заблокировать",
+      "actionAlertHint": "Отправить уведомление администратору, но не блокировать пользователя",
+      "actionBlockHint": "Автоматически заблокировать пользователя через Panel API и отправить уведомление",
+      "reason": "Причина",
+      "reasonPlaceholder": "Мошенничество, кража аккаунта и т.д.",
+      "empty": "Чёрный список HWID пуст",
+      "added": "HWID добавлен в blacklist. Затронуто пользователей: {{count}}",
+      "removed": "HWID удалён из blacklist",
+      "affectedUsers": "Пользователи с этим HWID ({{count}})",
+      "noUsers": "Пользователей с этим HWID не найдено"
     },
     "analyzers": {
       "temporal": "Временной (одновременные подключения)",
@@ -2314,7 +2404,8 @@
     "subtitle": "Конфигурация бота и панели. Приоритет: БД > .env > по умолчанию",
     "tabs": {
       "general": "Общие",
-      "resources": "Ресурсы Remnawave"
+      "resources": "Ресурсы Remnawave",
+      "faq": "FAQ"
     },
     "searchPlaceholder": "Поиск настроек...",
     "foundSettings": "Найдено: {{count}} настроек",
@@ -2322,25 +2413,80 @@
     "noSettingsHint": "Убедитесь, что база данных подключена и бот хотя бы раз запускался",
     "retry": "Повторить",
     "categories": {
-      "general": "Общие",
-      "notifications": "Уведомления",
-      "sync": "Синхронизация",
-      "violations": "Обнаружение нарушений",
-      "reports": "Отчёты",
-      "collector": "Коллектор данных",
-      "limits": "Лимиты",
-      "appearance": "Внешний вид",
-      "mailserver": "Почтовый сервер",
-      "security": "Безопасность"
+      "general": "⚙️ Общие",
+      "notifications": "🔔 Уведомления",
+      "sync": "🔄 Синхронизация",
+      "violations": "🛡️ Обнаружение нарушений",
+      "reports": "📊 Отчёты",
+      "collector": "📡 Коллектор данных",
+      "limits": "📏 Лимиты",
+      "appearance": "🎨 Внешний вид",
+      "mailserver": "📧 Почтовый сервер",
+      "security": "🔒 Безопасность",
+      "performance": "⚡ Производительность"
     },
     "subcategories": {
-      "topics": "Топики уведомлений",
-      "weights": "Веса компонентов скора",
-      "thresholds": "Пороги детекции",
-      "hard_block": "Жёсткая блокировка",
-      "trial": "Определение триальных пользователей",
-      "auth_methods": "Методы авторизации",
-      "brute_force": "Защита от перебора"
+      "topics": "💬 Топики уведомлений",
+      "weights": "⚖️ Веса компонентов скора",
+      "thresholds": "📐 Пороги детекции",
+      "hard_block": "🚫 Жёсткая блокировка",
+      "trial": "🆓 Определение триальных пользователей",
+      "auth_methods": "🔑 Методы авторизации",
+      "brute_force": "🛡️ Защита от перебора",
+      "database": "🗄️ База данных",
+      "intervals": "⏱️ Интервалы",
+      "rate_limits": "🚦 Лимиты запросов",
+      "cache": "💾 Кэш",
+      "violation_pipeline": "🔍 Конвейер проверки нарушений"
+    },
+    "faq": {
+      "description": "Частые вопросы и решения типичных проблем",
+      "items": {
+        "panelPort": {
+          "q": "Панель открывается только с указанием порта :3000",
+          "a": "Проблема с обратным прокси (Nginx/Caddy). После перезагрузки сервера прокси стартует раньше контейнеров и не может зарезолвить DNS-имена.\n\nДля Caddy — добавьте lb_try_duration 30s в каждый reverse_proxy блок:\nreverse_proxy web-frontend:80 {\n    lb_try_duration 30s\n}\n\nДля Nginx — добавьте resolver 127.0.0.11 valid=10s в upstream-блок.\n\nТакже поможет: docker restart caddy (или nginx) после ребута."
+        },
+        "passwordLogin": {
+          "q": "Не могу войти с паролем после регистрации",
+          "a": "Возможные причины:\n1. Пароль содержит кириллические символы-двойники (С вместо C, А вместо A). Переключите раскладку на EN и введите пароль заново.\n2. Браузер автозаполнил пароль с ошибкой. Попробуйте ввести вручную.\n3. Если ничего не помогает — сбросьте пароль через CLI:\ndocker exec -it <container> python3 scripts/admin_cli.py reset-password --username admin"
+        },
+        "highCpu": {
+          "q": "PostgreSQL грузит CPU на 99%",
+          "a": "Проверьте наличие индексов на часто используемых таблицах. Основные:\n- users: idx_users_username_lower, idx_users_email_lower\n- user_connections: idx_user_connections_user_active\n\nТакже настройте в разделе Производительность:\n- DB Pool max size (по умолчанию 50)\n- Statement timeout (по умолчанию 60с)\n\nМониторьте через: SELECT * FROM pg_stat_user_tables ORDER BY seq_scan DESC;"
+        },
+        "nodeOffline": {
+          "q": "Нода показывается офлайн, хотя работает",
+          "a": "Проверьте:\n1. Агент на ноде запущен и AGENT_COLLECTOR_URL указывает на web-backend (порт 8081)\n2. Токен агента совпадает с токеном в панели\n3. Нет файрвола между нодой и бэкендом\n4. Время на сервере синхронизировано (NTP)"
+        },
+        "alertSpam": {
+          "q": "Алерты спамят о давно отключённых нодах",
+          "a": "В настройках правила алерта используйте поле «Игнорировать ноды офлайн дольше (мин)». Например, установите 1440 (24 часа) — ноды, отключённые более суток, не будут вызывать повторные алерты."
+        },
+        "dockerRestart": {
+          "q": "После docker compose up сервисы не видят друг друга",
+          "a": "Убедитесь что сеть remnawave-network создана:\ndocker network create remnawave-network\n\nЗатем:\ndocker compose down && docker compose up -d\n\nЕсли используете несколько docker-compose файлов — все должны использовать одну external сеть."
+        },
+        "dbPool": {
+          "q": "Ошибки 'too many connections' в логах",
+          "a": "PostgreSQL имеет лимит соединений (по умолчанию 100). Каждый сервис (бот, бэкенд) использует пул.\n\nРешения:\n1. Уменьшите DB Pool max size в Настройки → Производительность\n2. Увеличьте max_connections в PostgreSQL:\n   ALTER SYSTEM SET max_connections = 200;\n3. Перезапустите PostgreSQL"
+        },
+        "passwordReset": {
+          "q": "Как сбросить пароль администратора?",
+          "a": "Способ 1 — через email (если SMTP настроен):\nНа странице входа нажмите «Забыли пароль?» и введите email.\n\nСпособ 2 — через CLI:\ndocker exec -it <container> python3 scripts/admin_cli.py reset-password --username admin\n\nСпособ 3 — создать нового суперадмина:\ndocker exec -it <container> python3 scripts/admin_cli.py create-superadmin --username newadmin"
+        },
+        "smtp": {
+          "q": "Как настроить отправку email?",
+          "a": "Два варианта:\n\n1. Встроенный почтовый сервер — перейдите в раздел «Почтовый сервер», добавьте домен, настройте DNS-записи (MX, SPF, DKIM, DMARC).\n\n2. Внешний SMTP-релей — перейдите в Уведомления → SMTP Config и укажите данные вашего SMTP-сервера (Gmail, Mailgun, и т.д.)."
+        },
+        "violationQueue": {
+          "q": "Как понять, справляется ли система с проверкой нарушений?",
+          "a": "Откройте /api/v2/collector/stats — там показано:\n- pending_users: сколько пользователей ждут проверку\n- health: idle/ok/busy/overloaded\n- backlog: разница между принятыми и обработанными\n- last_drain_duration_ms: время последней обработки\n\nЕсли health = 'overloaded' (>2000 в очереди):\n1. Увеличьте «Размер порции» в Настройки → Производительность → Конвейер\n2. Уменьшите «Интервал обработки» (например, с 3 до 1 сек)\n3. Увеличьте кулдаун проверки (Обнаружение нарушений → Кулдаун)\n\nЕсли ресурсы не загружены, но очередь растёт — увеличьте chunk_size. Если CPU на максимуме — увеличьте интервал и кулдаун."
+        },
+        "resourceLimits": {
+          "q": "Как ограничить потребление ресурсов (CPU/RAM)?",
+          "a": "Ограничение ресурсов настраивается на уровне Docker, а не приложения.\n\nВ docker-compose.yml добавьте:\nservices:\n  web-backend:\n    deploy:\n      resources:\n        limits:\n          cpus: '2.0'\n          memory: 1G\n        reservations:\n          cpus: '0.5'\n          memory: 256M\n\nНа уровне приложения настраивайте: пул БД, интервалы синхронизации, размер кэша — см. раздел «Производительность»."
+        }
+      }
     },
     "sync": {
       "title": "Синхронизация",
@@ -2620,6 +2766,20 @@
       "metricNodeOffline": "Нода офлайн (мин)",
       "metricTraffic": "Трафик сегодня (ГБ)",
       "metricUsersOnline": "Пользователи онлайн",
+      "metricNodesOnline": "Нод онлайн (шт)",
+      "metricNodesOffline": "Нод офлайн (шт)",
+      "metricNodesTotal": "Всего нод (шт)",
+      "metricDescCpu": "Максимальная загрузка CPU среди всех нод",
+      "metricDescRam": "Максимальная загрузка RAM среди всех нод",
+      "metricDescDisk": "Максимальная загрузка диска среди всех нод",
+      "metricDescNodeOffline": "Сколько минут самая давно отключённая нода не отвечает",
+      "metricDescTraffic": "Суммарный трафик по всем нодам за сегодня в ГБ",
+      "metricDescUsersOnline": "Суммарное количество подключённых пользователей",
+      "metricDescNodesOnline": "Количество нод в статусе онлайн",
+      "metricDescNodesOffline": "Количество нод в статусе офлайн",
+      "metricDescNodesTotal": "Общее количество активных (не отключённых) нод",
+      "maxOfflineMinutes": "Игнорировать ноды офлайн дольше (мин)",
+      "maxOfflineMinutesHint": "Не отправлять алерт, если нода офлайн дольше указанного времени. Полезно, чтобы не спамить о давно отключённых нодах.",
       "operator": "Оператор",
       "condition": "Условие",
       "threshold": "Порог",
@@ -2645,7 +2805,14 @@
       "varOperator": "Оператор сравнения (>, >=, <, и т.д.)",
       "varSeverity": "Уровень серьёзности (info, warning, critical)",
       "varNodeNames": "Имена затронутых/офлайн нод",
-      "varTimestamp": "Текущая метка времени UTC"
+      "varNodeIps": "IP-адреса офлайн нод (через запятую)",
+      "varIp": "IP-адреса офлайн нод (алиас для node_ips)",
+      "varNodesTotal": "Общее количество нод",
+      "varNodesOnline": "Количество нод онлайн",
+      "varNodesOffline": "Количество нод офлайн",
+      "varTimestamp": "Текущая метка времени UTC",
+      "clickToCopy": "нажмите для копирования",
+      "copiedVar": "Скопировано: {{var}}"
     },
     "alertLogs": {
       "status": "Статус",
@@ -3035,6 +3202,8 @@
     "PASSWORD_UPDATE_FAILED": "Не удалось обновить пароль",
     "INVALID_USERNAME": "Некорректное имя пользователя",
     "FORBIDDEN": "Доступ запрещён",
+    "EMAIL_NOT_CONFIGURED": "Email не настроен для отправки",
+    "RESET_TOKEN_INVALID": "Ссылка для сброса пароля недействительна или истекла",
 
     "USERNAME_EXISTS": "Имя пользователя уже занято",
     "CANNOT_MODIFY_SELF": "Нельзя изменить свой собственный аккаунт",
@@ -3489,5 +3658,23 @@
     "description": "Запрашиваемая страница не существует или была перемещена.",
     "goHome": "На главную",
     "goBack": "Назад"
+  },
+  "resetPassword": {
+    "title": "Сброс пароля",
+    "description": "Введите email, привязанный к вашему аккаунту. Мы отправим ссылку для сброса пароля.",
+    "emailPlaceholder": "admin@example.com",
+    "sendLink": "Отправить ссылку",
+    "backToLogin": "Вернуться к входу",
+    "emailSent": "Письмо отправлено",
+    "emailSentDescription": "Если этот email привязан к аккаунту, вы получите ссылку для сброса пароля. Проверьте почту, включая папку «Спам».",
+    "newPasswordTitle": "Новый пароль",
+    "newPasswordDescription": "Придумайте новый пароль для вашего аккаунта",
+    "newPassword": "Новый пароль",
+    "confirmPassword": "Подтверждение пароля",
+    "resetButton": "Сбросить пароль",
+    "success": "Пароль изменён",
+    "successDescription": "Ваш пароль успешно сброшен. Теперь вы можете войти с новым паролем.",
+    "goToLogin": "Перейти к входу",
+    "error": "Произошла ошибка. Попробуйте позже."
   }
 }

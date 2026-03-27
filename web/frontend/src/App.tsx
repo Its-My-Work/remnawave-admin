@@ -14,9 +14,10 @@ const routerBasename = rawSecretPath.startsWith('/') ? rawSecretPath : `/${rawSe
 // Layout
 import Layout from './components/layout/Layout'
 
-// Login and Dashboard loaded eagerly (critical path)
+// Login, Dashboard, ResetPassword loaded eagerly (critical path)
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import ResetPassword from './pages/ResetPassword'
 
 // Lazy-loaded pages
 const Users = lazy(() => import('./pages/Users'))
@@ -25,6 +26,7 @@ const Nodes = lazy(() => import('./pages/Nodes'))
 const Fleet = lazy(() => import('./pages/Fleet'))
 const Hosts = lazy(() => import('./pages/Hosts'))
 const Violations = lazy(() => import('./pages/Violations'))
+const BlockedIPs = lazy(() => import('./pages/BlockedIPs'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Admins = lazy(() => import('./pages/Admins'))
 const AuditLog = lazy(() => import('./pages/AuditLog'))
@@ -111,6 +113,7 @@ export default function App() {
           <Routes>
             {/* Public routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
             {/* Protected routes */}
             <Route
@@ -127,6 +130,7 @@ export default function App() {
                         <Route path="/fleet" element={<Fleet />} />
                         <Route path="/hosts" element={<Hosts />} />
                         <Route path="/violations" element={<Violations />} />
+                        <Route path="/blocked-ips" element={<BlockedIPs />} />
                         <Route path="/automations" element={<Automations />} />
                         <Route path="/notifications" element={<Notifications />} />
                         <Route path="/mailserver" element={<MailServer />} />

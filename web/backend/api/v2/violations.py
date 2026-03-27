@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Path, Query, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from typing import Optional
 from datetime import datetime, timedelta
+from pydantic import BaseModel, Field
 
 from web.backend.api.deps import get_current_admin, get_db, AdminUser, require_permission, get_client_ip
 from web.backend.core.errors import api_error, E
@@ -608,6 +609,169 @@ async def export_violations_csv(
     )
 
 
+
+@router.get("/hwid-blacklist")
+@limiter.limit(RATE_READ)
+async def list_hwid_blacklist(
+    request: Request,
+    admin: AdminUser = Depends(require_permission("violations", "view")),
+):
+    """List all blacklisted HWIDs."""
+    from shared.database import db_service
+    items = await db_service.get_hwid_blacklist()
+    return {"items": items, "total": len(items)}
+
+
+class HwidBlacklistRequest(BaseModel):
+    hwid: str = Field(..., min_length=1, max_length=255)
+    action: str = Field("alert", pattern=r"^(alert|block)$")
+    reason: Optional[str] = None
+
+
+@router.post("/hwid-blacklist")
+@limiter.limit(RATE_MUTATIONS)
+async def add_hwid_blacklist(
+    request: Request,
+    data: HwidBlacklistRequest,
+    admin: AdminUser = Depends(require_permission("violations", "create")),
+):
+    """Add HWID to blacklist."""
+    from shared.database import db_service
+
+    hwid = data.hwid.strip()
+    action = data.action
+    reason = data.reason
+
+    entry = await db_service.add_hwid_to_blacklist(
+        hwid=hwid,
+        action=action,
+        reason=reason,
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+    )
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="hwid_blacklist.add",
+        resource="violations",
+        resource_id=hwid,
+        details=json.dumps({"hwid": hwid, "action": action, "reason": reason}),
+        ip_address=get_client_ip(request),
+    )
+
+    # Check if any current users have this HWID and trigger immediate action
+    affected_users = await db_service.find_users_by_hwid(hwid)
+    if affected_users:
+        await _handle_blacklisted_hwid_users(hwid, action, reason, affected_users)
+
+    return {
+        "status": "ok",
+        "entry": entry,
+        "affected_users": len(affected_users),
+    }
+
+
+@router.delete("/hwid-blacklist/{hwid}")
+@limiter.limit(RATE_MUTATIONS)
+async def remove_hwid_blacklist(
+    request: Request,
+    hwid: str,
+    admin: AdminUser = Depends(require_permission("violations", "delete")),
+):
+    """Remove HWID from blacklist."""
+    from shared.database import db_service
+
+    deleted = await db_service.remove_hwid_from_blacklist(hwid)
+    if not deleted:
+        raise api_error(404, E.VIOLATION_NOT_FOUND, "HWID not found in blacklist")
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="hwid_blacklist.remove",
+        resource="violations",
+        resource_id=hwid,
+        details=json.dumps({"hwid": hwid}),
+        ip_address=get_client_ip(request),
+    )
+
+    return {"status": "ok"}
+
+
+@router.get("/hwid-blacklist/{hwid}/users")
+@limiter.limit(RATE_READ)
+async def hwid_blacklist_users(
+    request: Request,
+    hwid: str,
+    admin: AdminUser = Depends(require_permission("violations", "view")),
+):
+    """Find all users that have a specific HWID."""
+    from shared.database import db_service
+
+    users = await db_service.find_users_by_hwid(hwid)
+    return {"hwid": hwid, "users": users, "total": len(users)}
+
+
+async def _handle_blacklisted_hwid_users(
+    hwid: str,
+    action: str,
+    reason: Optional[str],
+    affected_users: list,
+):
+    """Process users who have a blacklisted HWID — alert or block them."""
+    from web.backend.core.notification_service import create_notification
+
+    usernames = ", ".join(
+        u.get("username") or str(u.get("user_uuid", "?"))
+        for u in affected_users[:10]
+    )
+
+    if action == "block":
+        # Auto-block affected users via Panel API
+        for user in affected_users:
+            try:
+                from shared.api_client import api_client
+                await api_client.disable_user(str(user["user_uuid"]))
+                logger.info(
+                    "Auto-blocked user %s (HWID blacklist: %s)",
+                    user.get("username") or user["user_uuid"], hwid,
+                )
+            except Exception as e:
+                logger.error("Failed to block user %s: %s", user["user_uuid"], e)
+
+        await create_notification(
+            title="HWID Blacklist: users blocked",
+            body=(
+                f"HWID {hwid[:16]}... blocked {len(affected_users)} user(s): {usernames}\n"
+                f"Reason: {reason or 'No reason specified'}"
+            ),
+            type="alert",
+            severity="critical",
+            link="/violations",
+            source="hwid_blacklist",
+            source_id=hwid,
+            channels=["in_app", "telegram"],
+            topic_type="violations",
+        )
+    else:
+        # Alert only
+        await create_notification(
+            title="HWID Blacklist: match found",
+            body=(
+                f"Blacklisted HWID {hwid[:16]}... found on {len(affected_users)} user(s): {usernames}\n"
+                f"Reason: {reason or 'No reason specified'}"
+            ),
+            type="alert",
+            severity="warning",
+            link="/violations",
+            source="hwid_blacklist",
+            source_id=hwid,
+            channels=["in_app", "telegram"],
+            topic_type="violations",
+        )
+
+
 @router.get("/{violation_id}", response_model=ViolationDetail)
 async def get_violation(
     violation_id: int,
@@ -742,3 +906,8 @@ async def annul_violation(
     )
 
     return {"status": "ok", "action": "annulled"}
+
+
+# ══════════════════════════════════════════════════════════════════
+# HWID Blacklist
+

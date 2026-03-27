@@ -369,6 +369,8 @@ function generatePassword(length = 16): string {
   return chars.join('')
 }
 
+const CYRILLIC_RE = /[\u0400-\u04FF]/
+
 interface PasswordStrengthResult {
   score: number
   level: 'none' | 'weak' | 'fair' | 'good' | 'strong'
@@ -380,6 +382,7 @@ interface PasswordStrengthResult {
     upper: boolean
     digit: boolean
     special: boolean
+    noCyrillic: boolean
   }
 }
 
@@ -390,8 +393,10 @@ function getPasswordStrength(password: string): PasswordStrengthResult {
     upper: /[A-Z]/.test(password),
     digit: /\d/.test(password),
     special: /[!@#$%^&*_+\-=\[\]{}|;:',.<>?/\\~`"()]/.test(password),
+    noCyrillic: !CYRILLIC_RE.test(password),
   }
-  const passedCount = Object.values(checks).filter(Boolean).length
+  const { noCyrillic, ...coreChecks } = checks
+  const passedCount = Object.values(coreChecks).filter(Boolean).length
   let score = passedCount * 16
   if (password.length >= 12) score += 10
   if (password.length >= 16) score += 10
@@ -430,6 +435,12 @@ function SettingsPasswordStrengthBar({ password }: { password: string }) {
           {strength.label !== 'none' ? t(`settings.password.strength.${strength.label}`) : ''}
         </span>
       </div>
+      {!strength.checks.noCyrillic && (
+        <div className="text-[11px] flex items-center gap-1 text-amber-400">
+          <X className="w-3 h-3 shrink-0" />
+          {t('login.passwordChecks.noCyrillic')}
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
         {[
           { ok: strength.checks.length, key: 'length', text: t('settings.password.checks.length') },
@@ -848,6 +859,85 @@ function IpWhitelistBlock() {
 }
 
 
+function FaqSection() {
+  const { t } = useTranslation()
+  const [openItem, setOpenItem] = useState<number | null>(null)
+
+  const faqItems = [
+    {
+      q: t('settings.faq.items.panelPort.q'),
+      a: t('settings.faq.items.panelPort.a'),
+    },
+    {
+      q: t('settings.faq.items.passwordLogin.q'),
+      a: t('settings.faq.items.passwordLogin.a'),
+    },
+    {
+      q: t('settings.faq.items.highCpu.q'),
+      a: t('settings.faq.items.highCpu.a'),
+    },
+    {
+      q: t('settings.faq.items.nodeOffline.q'),
+      a: t('settings.faq.items.nodeOffline.a'),
+    },
+    {
+      q: t('settings.faq.items.alertSpam.q'),
+      a: t('settings.faq.items.alertSpam.a'),
+    },
+    {
+      q: t('settings.faq.items.dockerRestart.q'),
+      a: t('settings.faq.items.dockerRestart.a'),
+    },
+    {
+      q: t('settings.faq.items.dbPool.q'),
+      a: t('settings.faq.items.dbPool.a'),
+    },
+    {
+      q: t('settings.faq.items.passwordReset.q'),
+      a: t('settings.faq.items.passwordReset.a'),
+    },
+    {
+      q: t('settings.faq.items.smtp.q'),
+      a: t('settings.faq.items.smtp.a'),
+    },
+    {
+      q: t('settings.faq.items.violationQueue.q'),
+      a: t('settings.faq.items.violationQueue.a'),
+    },
+    {
+      q: t('settings.faq.items.resourceLimits.q'),
+      a: t('settings.faq.items.resourceLimits.a'),
+    },
+  ]
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-dark-300 mb-4">{t('settings.faq.description')}</p>
+      {faqItems.map((item, idx) => (
+        <Card key={idx} className="p-0 overflow-hidden">
+          <button
+            onClick={() => setOpenItem(openItem === idx ? null : idx)}
+            className="w-full flex items-center justify-between p-4 hover:bg-[var(--glass-bg)] transition-colors text-left"
+          >
+            <span className="text-sm font-medium text-white pr-4">{item.q}</span>
+            {openItem === idx ? (
+              <ChevronDown className="w-4 h-4 text-dark-300 shrink-0" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-dark-300 shrink-0" />
+            )}
+          </button>
+          {openItem === idx && (
+            <div className="px-4 pb-4 text-sm text-dark-300 whitespace-pre-line border-t border-[var(--glass-border)]">
+              <div className="pt-3">{item.a}</div>
+            </div>
+          )}
+        </Card>
+      ))}
+    </div>
+  )
+}
+
+
 export default function Settings() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -1242,11 +1332,15 @@ export default function Settings() {
           </div>
         )}
         {Object.entries(subcategories).map(([sub, subItems]) => (
-          <div key={sub} className="mt-3">
-            <div className="text-xs font-medium text-dark-300 uppercase tracking-wider mb-1 px-1">
-              {t(`settings.subcategories.${sub}`, { defaultValue: sub })}
+          <div key={sub} className="mt-4">
+            <div className="flex items-center gap-2 mb-2 px-1">
+              <div className="h-4 w-1 rounded-full bg-gradient-to-b from-cyan-500 to-teal-500" />
+              <span className="text-xs font-semibold text-dark-200 tracking-wide">
+                {t(`settings.subcategories.${sub}`, { defaultValue: sub })}
+              </span>
+              <div className="flex-1 h-px bg-gradient-to-r from-dark-700/50 to-transparent" />
             </div>
-            <div className="bg-[var(--glass-bg)]/30 rounded-lg px-3 divide-y divide-dark-700/30">
+            <div className="bg-[var(--glass-bg)]/30 rounded-lg px-3 divide-y divide-dark-700/30 border border-[var(--glass-border)]/10">
               {subItems.map((item) => renderConfigItem(item))}
             </div>
           </div>
@@ -1295,10 +1389,15 @@ export default function Settings() {
         <TabsList>
           <TabsTrigger value="general">{t('settings.tabs.general')}</TabsTrigger>
           <TabsTrigger value="resources">{t('settings.tabs.resources')}</TabsTrigger>
+          <TabsTrigger value="faq">{t('settings.tabs.faq')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="resources" className="mt-4">
           <Resources embedded />
+        </TabsContent>
+
+        <TabsContent value="faq" className="mt-4">
+          <FaqSection />
         </TabsContent>
 
         <TabsContent value="general" className="space-y-6 mt-4">

@@ -57,6 +57,7 @@ SUPERADMIN_PERMISSIONS: Set[Tuple[str, str]] = {
     ("mailserver", "view"), ("mailserver", "create"), ("mailserver", "edit"), ("mailserver", "delete"),
     ("backups", "view"), ("backups", "create"), ("backups", "delete"),
     ("api_keys", "view"), ("api_keys", "create"), ("api_keys", "edit"), ("api_keys", "delete"),
+    ("blocked_ips", "view"), ("blocked_ips", "create"), ("blocked_ips", "delete"),
     ("bedolaga", "view"),
     ("bedolaga_customers", "view"), ("bedolaga_customers", "edit"), ("bedolaga_customers", "create"),
     ("bedolaga_promo", "view"), ("bedolaga_promo", "create"), ("bedolaga_promo", "edit"), ("bedolaga_promo", "delete"),

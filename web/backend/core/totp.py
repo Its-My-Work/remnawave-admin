@@ -95,7 +95,7 @@ def verify_totp_code(secret: str, code: str, account_id: Optional[int] = None) -
     now_counter = int(time.time()) // 30
     for offset in range(-1, 2):
         candidate = now_counter + offset
-        if hmac.compare_digest(totp.at(candidate), stripped):
+        if hmac.compare_digest(totp.at(candidate * 30), stripped):
             with _used_lock:
                 last = _used_counters.get(account_id)
                 if last is not None and last >= candidate:

@@ -624,6 +624,34 @@ function CreateUserModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs text-dark-200">{t('users.createModal.expireDate')}</Label>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {[
+                    { label: '7d', days: 7 },
+                    { label: '30d', days: 30 },
+                    { label: '90d', days: 90 },
+                    { label: '365d', days: 365 },
+                    { label: '2099', days: 0 },
+                  ].map(({ label, days }) => (
+                    <Button
+                      key={label}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => {
+                        const now = new Date()
+                        const d = days > 0
+                          ? new Date(now.getTime() + days * 86400000)
+                          : new Date(now.setFullYear(2099))
+                        const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+                          .toISOString().slice(0, 16)
+                        setForm({ ...form, expire_at: local })
+                      }}
+                    >
+                      {label === '2099' ? '♾️ 2099' : `+${label}`}
+                    </Button>
+                  ))}
+                </div>
                 <Input
                   type="datetime-local"
                   value={form.expire_at}

@@ -19,6 +19,9 @@ def user_create_expire_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text=_("user.expire_90d"), callback_data="user_create:expire:90"),
                 InlineKeyboardButton(text=_("user.expire_365d"), callback_data="user_create:expire:365"),
             ],
+            [
+                InlineKeyboardButton(text=_("user.expire_2099"), callback_data="user_create:expire:2099"),
+            ],
         ]
     )
 

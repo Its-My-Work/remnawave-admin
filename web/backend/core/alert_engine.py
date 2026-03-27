@@ -110,7 +110,7 @@ class AlertEngine:
             async with db_service.acquire() as conn:
                 # Node metrics from DB (only columns that actually exist)
                 nodes = await conn.fetch(
-                    "SELECT uuid, name, is_connected, is_disabled, "
+                    "SELECT uuid, name, address, is_connected, is_disabled, "
                     "cpu_usage, memory_usage, disk_usage, "
                     "traffic_used_bytes, metrics_updated_at "
                     "FROM nodes WHERE is_disabled = false"
@@ -119,9 +119,12 @@ class AlertEngine:
                 max_cpu = 0.0
                 max_ram = 0.0
                 max_disk = 0.0
+                total_nodes = 0
+                online_nodes_count = 0
                 offline_nodes: List[Dict[str, Any]] = []
 
                 for node in nodes:
+                    total_nodes += 1
                     cpu = node.get("cpu_usage") or 0
                     ram = node.get("memory_usage") or 0
                     disk = node.get("disk_usage") or 0
@@ -141,8 +144,11 @@ class AlertEngine:
                         offline_nodes.append({
                             "uuid": str(node["uuid"]),
                             "name": node["name"],
+                            "address": node.get("address") or "",
                             "offline_minutes": offline_min,
                         })
+                    else:
+                        online_nodes_count += 1
 
                     # Per-node metrics
                     node_name = node["name"] or str(node["uuid"])
@@ -154,6 +160,9 @@ class AlertEngine:
                 metrics["ram_usage_percent"] = max_ram
                 metrics["disk_usage_percent"] = max_disk
                 metrics["offline_nodes"] = offline_nodes
+                metrics["nodes_total"] = total_nodes
+                metrics["nodes_online"] = online_nodes_count
+                metrics["nodes_offline"] = len(offline_nodes)
 
                 # Node offline minutes (max)
                 if offline_nodes:
@@ -191,7 +200,24 @@ class AlertEngine:
         if not metric_name or not operator or threshold is None:
             return
 
-        current_value = metrics.get(metric_name)
+        # For node_offline_minutes: filter out nodes offline longer than max_offline_minutes
+        # This prevents spamming alerts for nodes that have been down for days/weeks
+        if metric_name == "node_offline_minutes":
+            max_offline = rule.get("max_offline_minutes") or 0
+            if max_offline > 0:
+                offline = metrics.get("offline_nodes") or []
+                recent_offline = [n for n in offline if n["offline_minutes"] <= max_offline]
+                if not recent_offline:
+                    return  # All offline nodes exceed max_offline_minutes — skip alert
+                # Use the max offline minutes among recently-offline nodes only
+                current_value = max(n["offline_minutes"] for n in recent_offline)
+                # Also update metrics so _fire_alert uses filtered list
+                metrics = {**metrics, "offline_nodes": recent_offline}
+            else:
+                current_value = metrics.get(metric_name)
+        else:
+            current_value = metrics.get(metric_name)
+
         if current_value is None:
             return
 
@@ -249,9 +275,10 @@ class AlertEngine:
         OP_SYMBOLS = {"gt": ">", "gte": ">=", "lt": "<", "lte": "<=", "eq": "=", "neq": "!="}
         op_symbol = OP_SYMBOLS.get(rule.get("operator", "gt"), rule.get("operator", ">"))
 
-        # Gather offline node names
+        # Gather offline node names and IPs
         offline = metrics.get("offline_nodes") or []
         node_names = ", ".join(n["name"] for n in offline[:5]) if offline else ""
+        node_ips = ", ".join(n.get("address", "") for n in offline[:5] if n.get("address")) if offline else ""
 
         # Template variables available for substitution
         tpl_vars = {
@@ -262,6 +289,11 @@ class AlertEngine:
             "operator": op_symbol,
             "severity": severity,
             "node_names": node_names,
+            "node_ips": node_ips,
+            "ip": node_ips,
+            "nodes_total": str(metrics.get("nodes_total", 0)),
+            "nodes_online": str(metrics.get("nodes_online", 0)),
+            "nodes_offline": str(metrics.get("nodes_offline", 0)),
             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         }
 

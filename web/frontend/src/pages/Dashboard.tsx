@@ -138,6 +138,22 @@ const fetchSystemComponents = async (): Promise<SystemComponentsResponse> => {
   return data
 }
 
+interface CollectorStats {
+  queue: { pending_users: number; peak_queue_size: number; health: string }
+  processing: {
+    total_enqueued: number; total_processed: number; total_violations_found: number
+    total_skipped_cooldown: number; last_drain_duration_ms: number; backlog: number
+  }
+  input: { total_batches_received: number; total_batches_rejected: number }
+  background_tasks: { active: number; dropped: number }
+  cooldown_cache_size: number
+}
+
+const fetchCollectorStats = async (): Promise<CollectorStats> => {
+  const { data } = await client.get('/collector/stats')
+  return data
+}
+
 interface TopUserItem {
   uuid: string
   username: string
@@ -736,6 +752,109 @@ function TopViolatorsCard({
   )
 }
 
+// ── CollectorQueueCard ───────────────────────────────────────────
+
+function CollectorQueueCard({ stats, loading }: { stats?: CollectorStats; loading: boolean }) {
+  const { t } = useTranslation()
+
+  const healthColor: Record<string, string> = {
+    idle: '#6b7280',
+    ok: '#10b981',
+    busy: '#f59e0b',
+    overloaded: '#ef4444',
+  }
+
+  const healthLabel: Record<string, string> = {
+    idle: 'Idle',
+    ok: 'OK',
+    busy: t('dashboard.collectorBusy'),
+    overloaded: t('dashboard.collectorOverloaded'),
+  }
+
+  const health = stats?.queue?.health || 'idle'
+  const color = healthColor[health] || '#6b7280'
+
+  const metrics = [
+    {
+      label: t('dashboard.collectorPending'),
+      value: stats?.queue?.pending_users ?? 0,
+      highlight: (stats?.queue?.pending_users ?? 0) > 500,
+    },
+    {
+      label: t('dashboard.collectorProcessed'),
+      value: stats?.processing?.total_processed ?? 0,
+    },
+    {
+      label: t('dashboard.collectorViolations'),
+      value: stats?.processing?.total_violations_found ?? 0,
+    },
+    {
+      label: t('dashboard.collectorSkipped'),
+      value: stats?.processing?.total_skipped_cooldown ?? 0,
+    },
+    {
+      label: t('dashboard.collectorDrainMs'),
+      value: `${stats?.processing?.last_drain_duration_ms ?? 0}ms`,
+    },
+    {
+      label: t('dashboard.collectorBatches'),
+      value: stats?.input?.total_batches_received ?? 0,
+    },
+  ]
+
+  return (
+    <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-sm md:text-base">{t('dashboard.collectorQueue')}</CardTitle>
+          </div>
+          <Badge
+            variant="secondary"
+            className="text-[10px] font-mono"
+            style={{ color, borderColor: color }}
+          >
+            {healthLabel[health] || health}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        {loading ? (
+          <div className="space-y-2">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-7 w-full" />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {metrics.map((m) => (
+              <div
+                key={m.label}
+                className="flex items-center justify-between bg-[var(--glass-bg)] rounded-lg px-2.5 py-1.5 border border-[var(--glass-border)]"
+              >
+                <span className="text-xs text-muted-foreground">{m.label}</span>
+                <span
+                  className={`text-xs font-mono ${m.highlight ? 'text-amber-400 font-bold' : 'text-white'}`}
+                >
+                  {typeof m.value === 'number' ? m.value.toLocaleString() : m.value}
+                </span>
+              </div>
+            ))}
+            {(stats?.input?.total_batches_rejected ?? 0) > 0 && (
+              <div className="flex items-center justify-between bg-red-500/10 rounded-lg px-2.5 py-1.5 border border-red-500/30">
+                <span className="text-xs text-red-400">{t('dashboard.collectorRejected')}</span>
+                <span className="text-xs font-mono text-red-400 font-bold">
+                  {stats!.input.total_batches_rejected.toLocaleString()}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 // ── SystemStatusCard ─────────────────────────────────────────────
 
 function SystemStatusCard({
@@ -1128,7 +1247,7 @@ function UpdateCheckerCard() {
         <Separator className="bg-[var(--glass-bg-hover)]" />
 
         {/* Dependencies */}
-        <div className="grid grid-cols-2 gap-2 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
           {deps?.python && (
             <div className="flex items-center justify-between bg-[var(--glass-bg)] rounded px-3 py-1.5">
               <span className="text-dark-300">Python</span>
@@ -1608,6 +1727,14 @@ export default function Dashboard() {
     enabled: canViewAnalytics,
   })
 
+  const { data: collectorStats, isLoading: collectorLoading } = useQuery({
+    queryKey: ['collectorStats'],
+    queryFn: fetchCollectorStats,
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+    enabled: canViewAnalytics,
+  })
+
   const { data: systemComponents, isLoading: componentsLoading } = useQuery({
     queryKey: ['systemComponents'],
     queryFn: fetchSystemComponents,
@@ -2037,9 +2164,13 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* ── Row 6: Billing + System Status + Updates ──────────── */}
+      {/* ── Row 6: Billing + Collector + System Status + Updates ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {canViewBilling && <BillingSummaryCard loading={false} />}
+
+        {canViewAnalytics && (
+          <CollectorQueueCard stats={collectorStats} loading={collectorLoading} />
+        )}
 
         {canViewAnalytics && (
           <SystemStatusCard
@@ -2058,7 +2189,7 @@ export default function Dashboard() {
               <CardTitle className="text-sm md:text-base">{t('dashboard.quickActions')}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
                   { icon: Users, label: t('dashboard.users'), href: '/users', perm: 'users' },
                   { icon: Server, label: t('dashboard.nodes'), href: '/nodes', perm: 'nodes' },

@@ -50,6 +50,7 @@ AVAILABLE_RESOURCES = {
     "mailserver": ["view", "create", "edit", "delete"],
     "backups": ["view", "create", "delete"],
     "api_keys": ["view", "create", "edit", "delete"],
+    "blocked_ips": ["view", "create", "delete"],
     "bedolaga": ["view"],
     "bedolaga_customers": ["view", "edit", "create"],
     "bedolaga_promo": ["view", "create", "edit", "delete"],

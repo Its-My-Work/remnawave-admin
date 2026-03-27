@@ -126,6 +126,9 @@ async def handle_pending(message: Message, state: FSMContext) -> None:
         await _handle_node_edit_input(message, ctx)
     elif action == "asn_sync_custom_limit":
         await _handle_asn_sync_custom_limit_input(message, ctx)
+    elif action == "block_ip_add":
+        from src.handlers.blocked_ips import handle_block_ip_add
+        await handle_block_ip_add(message, ctx)
     else:
         await _send_clean_message(message, _("errors.generic"))
 
