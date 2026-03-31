@@ -915,7 +915,7 @@ class DatabaseService:
                 f" OR uuid::text LIKE {like_param}"
                 f" OR short_uuid LIKE {like_param}"
                 f" OR telegram_id::text LIKE {like_param}"
-                f" OR LOWER(description) LIKE LOWER({like_param}))"
+                f" OR LOWER(COALESCE(description, raw_data->>'description', '')) LIKE LOWER({like_param}))"
             )
 
         # Filter: status
@@ -1072,8 +1072,8 @@ class DatabaseService:
             INSERT INTO users (
                 uuid, short_uuid, username, subscription_uuid, telegram_id,
                 email, status, expire_at, traffic_limit_bytes, used_traffic_bytes,
-                hwid_device_limit, created_at, updated_at, raw_data
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), $13)
+                hwid_device_limit, description, created_at, updated_at, raw_data
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), $14)
             ON CONFLICT (uuid) DO UPDATE SET
                 short_uuid = EXCLUDED.short_uuid,
                 username = EXCLUDED.username,
@@ -1085,6 +1085,7 @@ class DatabaseService:
                 traffic_limit_bytes = EXCLUDED.traffic_limit_bytes,
                 used_traffic_bytes = EXCLUDED.used_traffic_bytes,
                 hwid_device_limit = EXCLUDED.hwid_device_limit,
+                description = EXCLUDED.description,
                 updated_at = NOW(),
                 raw_data = EXCLUDED.raw_data
             """,
@@ -1099,6 +1100,7 @@ class DatabaseService:
             response.get("trafficLimitBytes"),
             used_traffic,
             response.get("hwidDeviceLimit"),
+            response.get("description") or response.get("note") or "",
             _parse_timestamp(response.get("createdAt")),
             json.dumps(response),
         )
@@ -1143,6 +1145,7 @@ class DatabaseService:
         traffic_limits = []
         used_traffics = []
         hwid_limits = []
+        descriptions = []
         created_ats = []
         raw_datas = []
 
@@ -1169,6 +1172,7 @@ class DatabaseService:
             used_traffics.append(str(used_traffic) if used_traffic is not None else None)
             hl = response.get("hwidDeviceLimit")
             hwid_limits.append(str(hl) if hl is not None else None)
+            descriptions.append(response.get("description") or response.get("note") or "")
             created_ats.append(_parse_timestamp(response.get("createdAt")))
             raw_datas.append(json.dumps(response))
 
@@ -1182,17 +1186,17 @@ class DatabaseService:
                     INSERT INTO users (
                         uuid, short_uuid, username, subscription_uuid, telegram_id,
                         email, status, expire_at, traffic_limit_bytes, used_traffic_bytes,
-                        hwid_device_limit, created_at, updated_at, raw_data
+                        hwid_device_limit, description, created_at, updated_at, raw_data
                     )
                     SELECT
                         u::uuid, su, un, sub::uuid, tid::bigint,
                         em, st, ea, tl::bigint, ut::bigint,
-                        hl::integer, ca, NOW(), rd::jsonb
+                        hl::integer, descr, ca, NOW(), rd::jsonb
                     FROM UNNEST(
                         $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
                         $6::text[], $7::text[], $8::timestamptz[], $9::text[], $10::text[],
-                        $11::text[], $12::timestamptz[], $13::text[]
-                    ) AS t(u, su, un, sub, tid, em, st, ea, tl, ut, hl, ca, rd)
+                        $11::text[], $12::text[], $13::timestamptz[], $14::text[]
+                    ) AS t(u, su, un, sub, tid, em, st, ea, tl, ut, hl, descr, ca, rd)
                     ON CONFLICT (uuid) DO UPDATE SET
                         short_uuid = EXCLUDED.short_uuid,
                         username = EXCLUDED.username,
@@ -1204,12 +1208,13 @@ class DatabaseService:
                         traffic_limit_bytes = EXCLUDED.traffic_limit_bytes,
                         used_traffic_bytes = EXCLUDED.used_traffic_bytes,
                         hwid_device_limit = EXCLUDED.hwid_device_limit,
+                        description = EXCLUDED.description,
                         updated_at = NOW(),
                         raw_data = EXCLUDED.raw_data
                     """,
                     uuids, short_uuids, usernames, subscription_uuids, telegram_ids,
                     emails, statuses, expire_ats, traffic_limits, used_traffics,
-                    hwid_limits, created_ats, raw_datas,
+                    hwid_limits, descriptions, created_ats, raw_datas,
                 )
                 return int(result.split()[-1]) if result else 0
         except Exception as e:

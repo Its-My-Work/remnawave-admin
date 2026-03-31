@@ -445,6 +445,32 @@ async def resolve_user(
             last_error = e
             logger.debug("Resolve by %s failed for '%s': %s", method_name, query, e)
 
+    # Fallback: search local DB (description, notes, etc.)
+    try:
+        from shared.database import db_service
+        if db_service.is_connected:
+            async with db_service.acquire() as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT uuid, username FROM users
+                    WHERE LOWER(raw_data->>'description') LIKE $1
+                       OR LOWER(raw_data->>'note') LIKE $1
+                    LIMIT 1
+                    """,
+                    f"%{query.lower()}%",
+                )
+                if row:
+                    # Found in local DB — fetch full data from Panel
+                    try:
+                        result = await api_client.get_user_by_uuid(str(row["uuid"]))
+                        payload = result.get("response", result) if isinstance(result, dict) else result
+                        if payload:
+                            return payload
+                    except Exception:
+                        return {"uuid": str(row["uuid"]), "username": row["username"]}
+    except Exception as e:
+        logger.debug("Resolve local DB search failed for '%s': %s", query, e)
+
     raise api_error(404, E.USER_NOT_FOUND, "User not found")
 
 
