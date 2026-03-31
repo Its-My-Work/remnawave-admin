@@ -2581,7 +2581,7 @@ function TorrentAnalyticsCard() {
 
 // ── Main Page ───────────────────────────────────────────────────
 
-const VALID_TABS = ['geography', 'users', 'trends', 'shared-hwids', 'providers', 'nodes', 'geo-balance', 'torrent', 'retention'] as const
+const VALID_TABS = ['geography', 'users', 'trends', 'shared-hwids', 'providers', 'nodes-traffic', 'nodes', 'geo-balance', 'torrent', 'retention'] as const
 
 export default function Analytics() {
   const { t } = useTranslation()
