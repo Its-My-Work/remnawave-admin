@@ -849,12 +849,7 @@ export default function Users() {
   // Resolve user — universal lookup
   const resolveMutation = useMutation({
     mutationFn: async (query: string) => {
-      const body: Record<string, unknown> = {}
-      if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(query)) body.uuid = query
-      else if (/^\d+$/.test(query)) body.id = parseInt(query)
-      else if (/^[a-zA-Z0-9]{1,8}$/.test(query) && query.length <= 8) body.shortUuid = query
-      else body.username = query
-      const { data } = await client.post('/users/resolve', body)
+      const { data } = await client.post('/users/resolve', { query })
       return data
     },
     onSuccess: (data) => {

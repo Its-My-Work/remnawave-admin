@@ -408,47 +408,44 @@ async def resolve_user(
     from shared.api_client import api_client
 
     body = await request.json()
-    uuid = body.get("uuid")
-    user_id = body.get("id")
-    short_uuid = body.get("shortUuid")
-    username = body.get("username")
+    query = body.get("query", "").strip()
 
-    if not any([uuid, user_id is not None, short_uuid, username]):
-        raise HTTPException(status_code=400, detail="At least one identifier required")
+    # Also accept individual fields for backward compat
+    if not query:
+        query = body.get("uuid") or body.get("shortUuid") or body.get("username") or ""
+        if body.get("id") is not None:
+            query = str(body["id"])
 
-    # Try Panel API resolve endpoint first, fallback to individual lookups
-    try:
-        result = await api_client.resolve_user(
-            uuid=uuid, id=user_id,
-            short_uuid=short_uuid, username=username,
-        )
-        payload = result.get("response", result) if isinstance(result, dict) else result
-        return payload
-    except Exception:
-        pass  # Panel may not support /resolve — fallback below
+    if not query:
+        raise HTTPException(status_code=400, detail="Query is required")
 
-    # Fallback: use individual lookup methods
-    try:
-        if uuid:
-            result = await api_client.get_user_by_uuid(uuid)
-        elif user_id is not None:
-            result = await api_client.get_user_by_id(user_id)
-        elif short_uuid:
-            result = await api_client.get_user_by_short_uuid(short_uuid)
-        elif username:
-            result = await api_client.get_user_by_username(username)
-        else:
-            raise api_error(404, E.USER_NOT_FOUND, "User not found")
+    import re
 
-        payload = result.get("response", result) if isinstance(result, dict) else result
-        return payload
-    except HTTPException:
-        raise
-    except Exception as e:
-        if "404" in str(e) or "not found" in str(e).lower():
-            raise api_error(404, E.USER_NOT_FOUND, "User not found")
-        logger.error("Failed to resolve user: %s", e)
-        raise api_error(502, E.API_SERVICE_UNAVAILABLE)
+    # Build ordered list of lookup methods to try
+    lookups = []
+    if re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-', query, re.IGNORECASE):
+        lookups.append(("uuid", lambda: api_client.get_user_by_uuid(query)))
+    elif query.isdigit():
+        lookups.append(("id", lambda: api_client.get_user_by_id(int(query))))
+    else:
+        # Could be username or short_uuid — try both
+        lookups.append(("username", lambda: api_client.get_user_by_username(query)))
+        lookups.append(("short_uuid", lambda: api_client.get_user_by_short_uuid(query)))
+        if "@" in query:
+            lookups.insert(0, ("email", lambda: api_client.get_users_by_email(query)))
+
+    last_error = None
+    for method_name, lookup_fn in lookups:
+        try:
+            result = await lookup_fn()
+            payload = result.get("response", result) if isinstance(result, dict) else result
+            if payload:
+                return payload
+        except Exception as e:
+            last_error = e
+            logger.debug("Resolve by %s failed for '%s': %s", method_name, query, e)
+
+    raise api_error(404, E.USER_NOT_FOUND, "User not found")
 
 
 @router.get("/{user_uuid}", response_model=UserDetail)
