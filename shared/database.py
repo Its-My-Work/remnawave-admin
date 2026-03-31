@@ -915,7 +915,7 @@ class DatabaseService:
                 f" OR uuid::text LIKE {like_param}"
                 f" OR short_uuid LIKE {like_param}"
                 f" OR telegram_id::text LIKE {like_param}"
-                f" OR LOWER(description) LIKE LOWER({like_param}))"
+                f" OR LOWER(COALESCE(description, raw_data->>'description', '')) LIKE LOWER({like_param}))"
             )
 
         # Filter: status
@@ -1072,8 +1072,8 @@ class DatabaseService:
             INSERT INTO users (
                 uuid, short_uuid, username, subscription_uuid, telegram_id,
                 email, status, expire_at, traffic_limit_bytes, used_traffic_bytes,
-                hwid_device_limit, created_at, updated_at, raw_data
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), $13)
+                hwid_device_limit, description, created_at, updated_at, raw_data
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), $14)
             ON CONFLICT (uuid) DO UPDATE SET
                 short_uuid = EXCLUDED.short_uuid,
                 username = EXCLUDED.username,
@@ -1085,6 +1085,7 @@ class DatabaseService:
                 traffic_limit_bytes = EXCLUDED.traffic_limit_bytes,
                 used_traffic_bytes = EXCLUDED.used_traffic_bytes,
                 hwid_device_limit = EXCLUDED.hwid_device_limit,
+                description = EXCLUDED.description,
                 updated_at = NOW(),
                 raw_data = EXCLUDED.raw_data
             """,
@@ -1099,6 +1100,7 @@ class DatabaseService:
             response.get("trafficLimitBytes"),
             used_traffic,
             response.get("hwidDeviceLimit"),
+            response.get("description") or response.get("note") or "",
             _parse_timestamp(response.get("createdAt")),
             json.dumps(response),
         )
@@ -1143,6 +1145,7 @@ class DatabaseService:
         traffic_limits = []
         used_traffics = []
         hwid_limits = []
+        descriptions = []
         created_ats = []
         raw_datas = []
 
@@ -1169,6 +1172,7 @@ class DatabaseService:
             used_traffics.append(str(used_traffic) if used_traffic is not None else None)
             hl = response.get("hwidDeviceLimit")
             hwid_limits.append(str(hl) if hl is not None else None)
+            descriptions.append(response.get("description") or response.get("note") or "")
             created_ats.append(_parse_timestamp(response.get("createdAt")))
             raw_datas.append(json.dumps(response))
 
@@ -1182,17 +1186,17 @@ class DatabaseService:
                     INSERT INTO users (
                         uuid, short_uuid, username, subscription_uuid, telegram_id,
                         email, status, expire_at, traffic_limit_bytes, used_traffic_bytes,
-                        hwid_device_limit, created_at, updated_at, raw_data
+                        hwid_device_limit, description, created_at, updated_at, raw_data
                     )
                     SELECT
                         u::uuid, su, un, sub::uuid, tid::bigint,
                         em, st, ea, tl::bigint, ut::bigint,
-                        hl::integer, ca, NOW(), rd::jsonb
+                        hl::integer, descr, ca, NOW(), rd::jsonb
                     FROM UNNEST(
                         $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
                         $6::text[], $7::text[], $8::timestamptz[], $9::text[], $10::text[],
-                        $11::text[], $12::timestamptz[], $13::text[]
-                    ) AS t(u, su, un, sub, tid, em, st, ea, tl, ut, hl, ca, rd)
+                        $11::text[], $12::text[], $13::timestamptz[], $14::text[]
+                    ) AS t(u, su, un, sub, tid, em, st, ea, tl, ut, hl, descr, ca, rd)
                     ON CONFLICT (uuid) DO UPDATE SET
                         short_uuid = EXCLUDED.short_uuid,
                         username = EXCLUDED.username,
@@ -1204,12 +1208,13 @@ class DatabaseService:
                         traffic_limit_bytes = EXCLUDED.traffic_limit_bytes,
                         used_traffic_bytes = EXCLUDED.used_traffic_bytes,
                         hwid_device_limit = EXCLUDED.hwid_device_limit,
+                        description = EXCLUDED.description,
                         updated_at = NOW(),
                         raw_data = EXCLUDED.raw_data
                     """,
                     uuids, short_uuids, usernames, subscription_uuids, telegram_ids,
                     emails, statuses, expire_ats, traffic_limits, used_traffics,
-                    hwid_limits, created_ats, raw_datas,
+                    hwid_limits, descriptions, created_ats, raw_datas,
                 )
                 return int(result.split()[-1]) if result else 0
         except Exception as e:
@@ -5451,6 +5456,83 @@ class DatabaseService:
             logger.error("Error cleaning up expired blocked IPs: %s", e)
             return 0
 
+    # ── HWID Blacklist ──────────────────────────────────────────
+
+    async def get_hwid_blacklist(self) -> List[Dict[str, Any]]:
+        """Get all blacklisted HWIDs."""
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM hwid_blacklist ORDER BY created_at DESC"
+            )
+            return [dict(r) for r in rows]
+
+    async def get_blacklisted_hwid(self, hwid: str) -> Optional[Dict[str, Any]]:
+        """Check if a specific HWID is blacklisted. Returns the entry or None."""
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM hwid_blacklist WHERE hwid = $1", hwid
+            )
+            return dict(row) if row else None
+
+    async def check_hwids_against_blacklist(self, hwids: List[str]) -> List[Dict[str, Any]]:
+        """Check multiple HWIDs against blacklist. Returns matching entries."""
+        if not hwids:
+            return []
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM hwid_blacklist WHERE hwid = ANY($1::text[])", hwids
+            )
+            return [dict(r) for r in rows]
+
+    async def add_hwid_to_blacklist(
+        self,
+        hwid: str,
+        action: str = "alert",
+        reason: Optional[str] = None,
+        admin_id: Optional[int] = None,
+        admin_username: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Add HWID to blacklist. Returns created entry or None if already exists."""
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO hwid_blacklist (hwid, action, reason, added_by_admin_id, added_by_username)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (hwid) DO UPDATE SET
+                    action = EXCLUDED.action,
+                    reason = EXCLUDED.reason,
+                    added_by_admin_id = EXCLUDED.added_by_admin_id,
+                    added_by_username = EXCLUDED.added_by_username
+                RETURNING *
+                """,
+                hwid, action, reason, admin_id, admin_username,
+            )
+            return dict(row) if row else None
+
+    async def remove_hwid_from_blacklist(self, hwid: str) -> bool:
+        """Remove HWID from blacklist. Returns True if deleted."""
+        async with self.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM hwid_blacklist WHERE hwid = $1", hwid
+            )
+            return "DELETE 1" in result
+
+    async def find_users_by_hwid(self, hwid: str) -> List[Dict[str, Any]]:
+        """Find all users that have a specific HWID."""
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT h.user_uuid, u.username, u.status, h.platform, h.device_model,
+                       h.created_at as hwid_first_seen, h.updated_at as hwid_last_seen
+                FROM user_hwid_devices h
+                LEFT JOIN users u ON u.uuid = h.user_uuid
+                WHERE h.hwid = $1
+                ORDER BY h.updated_at DESC
+                """,
+                hwid,
+            )
+            return [dict(r) for r in rows]
+
 
 def _db_row_to_api_format(row) -> Dict[str, Any]:
     """
@@ -5565,83 +5647,6 @@ def _parse_timestamp(value: Any) -> Optional[datetime]:
     
     return None
 
-
-    # ── HWID Blacklist ──────────────────────────────────────────
-
-    async def get_hwid_blacklist(self) -> List[Dict[str, Any]]:
-        """Get all blacklisted HWIDs."""
-        async with self.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT * FROM hwid_blacklist ORDER BY created_at DESC"
-            )
-            return [dict(r) for r in rows]
-
-    async def get_blacklisted_hwid(self, hwid: str) -> Optional[Dict[str, Any]]:
-        """Check if a specific HWID is blacklisted. Returns the entry or None."""
-        async with self.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT * FROM hwid_blacklist WHERE hwid = $1", hwid
-            )
-            return dict(row) if row else None
-
-    async def check_hwids_against_blacklist(self, hwids: List[str]) -> List[Dict[str, Any]]:
-        """Check multiple HWIDs against blacklist. Returns matching entries."""
-        if not hwids:
-            return []
-        async with self.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT * FROM hwid_blacklist WHERE hwid = ANY($1::text[])", hwids
-            )
-            return [dict(r) for r in rows]
-
-    async def add_hwid_to_blacklist(
-        self,
-        hwid: str,
-        action: str = "alert",
-        reason: Optional[str] = None,
-        admin_id: Optional[int] = None,
-        admin_username: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
-        """Add HWID to blacklist. Returns created entry or None if already exists."""
-        async with self.acquire() as conn:
-            row = await conn.fetchrow(
-                """
-                INSERT INTO hwid_blacklist (hwid, action, reason, added_by_admin_id, added_by_username)
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (hwid) DO UPDATE SET
-                    action = EXCLUDED.action,
-                    reason = EXCLUDED.reason,
-                    added_by_admin_id = EXCLUDED.added_by_admin_id,
-                    added_by_username = EXCLUDED.added_by_username
-                RETURNING *
-                """,
-                hwid, action, reason, admin_id, admin_username,
-            )
-            return dict(row) if row else None
-
-    async def remove_hwid_from_blacklist(self, hwid: str) -> bool:
-        """Remove HWID from blacklist. Returns True if deleted."""
-        async with self.acquire() as conn:
-            result = await conn.execute(
-                "DELETE FROM hwid_blacklist WHERE hwid = $1", hwid
-            )
-            return "DELETE 1" in result
-
-    async def find_users_by_hwid(self, hwid: str) -> List[Dict[str, Any]]:
-        """Find all users that have a specific HWID."""
-        async with self.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT h.user_uuid, u.username, u.status, h.platform, h.device_model,
-                       h.created_at as hwid_first_seen, h.updated_at as hwid_last_seen
-                FROM user_hwid_devices h
-                LEFT JOIN users u ON u.uuid = h.user_uuid
-                WHERE h.hwid = $1
-                ORDER BY h.updated_at DESC
-                """,
-                hwid,
-            )
-            return [dict(r) for r in rows]
 
 
 # Global database service instance

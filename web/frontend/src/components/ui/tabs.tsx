@@ -11,6 +11,12 @@ const TabsList = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
+    onWheel={(e) => {
+      if (e.deltaY !== 0) {
+        e.currentTarget.scrollLeft += e.deltaY
+        e.preventDefault()
+      }
+    }}
     className={cn(
       "inline-flex h-10 items-center rounded-md bg-[var(--glass-bg)] p-1 text-dark-200 border border-[var(--glass-border)] overflow-x-auto max-w-full scrollbar-none",
       className

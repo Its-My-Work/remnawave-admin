@@ -398,6 +398,82 @@ async def get_external_squads(
     return [_normalize_squad(sq) for sq in squads if isinstance(sq, dict)]
 
 
+@router.post("/resolve")
+@limiter.limit(RATE_BULK)
+async def resolve_user(
+    request: Request,
+    admin: AdminUser = Depends(require_permission("users", "view")),
+):
+    """Универсальный поиск пользователя по uuid/id/shortUuid/username."""
+    from shared.api_client import api_client
+
+    body = await request.json()
+    query = body.get("query", "").strip()
+
+    # Also accept individual fields for backward compat
+    if not query:
+        query = body.get("uuid") or body.get("shortUuid") or body.get("username") or ""
+        if body.get("id") is not None:
+            query = str(body["id"])
+
+    if not query:
+        raise HTTPException(status_code=400, detail="Query is required")
+
+    import re
+
+    # Build ordered list of lookup methods to try
+    lookups = []
+    if re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-', query, re.IGNORECASE):
+        lookups.append(("uuid", lambda: api_client.get_user_by_uuid(query)))
+    elif query.isdigit():
+        lookups.append(("id", lambda: api_client.get_user_by_id(int(query))))
+    else:
+        # Could be username or short_uuid — try both
+        lookups.append(("username", lambda: api_client.get_user_by_username(query)))
+        lookups.append(("short_uuid", lambda: api_client.get_user_by_short_uuid(query)))
+        if "@" in query:
+            lookups.insert(0, ("email", lambda: api_client.get_users_by_email(query)))
+
+    last_error = None
+    for method_name, lookup_fn in lookups:
+        try:
+            result = await lookup_fn()
+            payload = result.get("response", result) if isinstance(result, dict) else result
+            if payload:
+                return payload
+        except Exception as e:
+            last_error = e
+            logger.debug("Resolve by %s failed for '%s': %s", method_name, query, e)
+
+    # Fallback: search local DB (description, notes, etc.)
+    try:
+        from shared.database import db_service
+        if db_service.is_connected:
+            async with db_service.acquire() as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT uuid, username FROM users
+                    WHERE LOWER(raw_data->>'description') LIKE $1
+                       OR LOWER(raw_data->>'note') LIKE $1
+                    LIMIT 1
+                    """,
+                    f"%{query.lower()}%",
+                )
+                if row:
+                    # Found in local DB — fetch full data from Panel
+                    try:
+                        result = await api_client.get_user_by_uuid(str(row["uuid"]))
+                        payload = result.get("response", result) if isinstance(result, dict) else result
+                        if payload:
+                            return payload
+                    except Exception:
+                        return {"uuid": str(row["uuid"]), "username": row["username"]}
+    except Exception as e:
+        logger.debug("Resolve local DB search failed for '%s': %s", query, e)
+
+    raise api_error(404, E.USER_NOT_FOUND, "User not found")
+
+
 @router.get("/{user_uuid}", response_model=UserDetail)
 async def get_user(
     user_uuid: str,
@@ -1254,4 +1330,40 @@ async def drop_user_connections(
         logger.error("Failed to drop connections for %s: %s", user_uuid, e)
         raise api_error(502, E.API_SERVICE_UNAVAILABLE)
 
+
+# ── Fetch Users IPs by Node ──────────────────────────────────────
+
+@router.post("/node/{node_uuid}/fetch-users-ips")
+async def fetch_users_ips_by_node(
+    node_uuid: str,
+    admin: AdminUser = Depends(require_permission("users", "view")),
+):
+    """Запускает сбор IP всех пользователей на ноде. Возвращает jobId."""
+    from shared.api_client import api_client
+
+    try:
+        result = await api_client.fetch_users_ips_by_node(node_uuid)
+        payload = result.get("response", result) if isinstance(result, dict) else result
+        return payload
+    except Exception as e:
+        logger.error("Failed to fetch users IPs for node %s: %s", node_uuid, e)
+        raise api_error(502, E.API_SERVICE_UNAVAILABLE)
+
+
+@router.get("/node/{node_uuid}/fetch-users-ips/result/{job_id}")
+async def get_fetch_users_ips_result(
+    node_uuid: str,
+    job_id: str,
+    admin: AdminUser = Depends(require_permission("users", "view")),
+):
+    """Получает результат сбора IP пользователей по jobId."""
+    from shared.api_client import api_client
+
+    try:
+        result = await api_client.get_fetch_users_ips_result(job_id)
+        payload = result.get("response", result) if isinstance(result, dict) else result
+        return payload
+    except Exception as e:
+        logger.error("Failed to get fetch users IPs result for job %s: %s", job_id, e)
+        raise api_error(502, E.API_SERVICE_UNAVAILABLE)
 

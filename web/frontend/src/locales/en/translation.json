@@ -104,7 +104,7 @@
     "fleet": "Fleet",
     "hosts": "Hosts",
     "violations": "Violations",
-    "blockedIPs": "Blocked IPs",
+    "blocking": "Blocking",
     "automations": "Automations",
     "notifications": "Notifications",
     "admins": "Admins & Roles",
@@ -295,6 +295,9 @@
     "statusUnknown": "Unknown",
     "ms": "ms",
     "sessions": "sessions",
+    "countries": "Countries",
+    "cores": "cores",
+    "panelSince": "Running since",
     "uptime": "Uptime",
     "uptimeDH": "{{days}}d {{hours}}h",
     "uptimeHM": "{{hours}}h {{minutes}}m",
@@ -395,6 +398,8 @@
     "createdAt": "Created",
     "lastActive": "Last active",
     "searchPlaceholder": "Search by name, email or UUID...",
+    "resolveButton": "Find exact",
+    "resolveNotFound": "User not found",
     "noUsers": "No users",
     "usersNotFound": "Users not found",
     "createUser": "Create user",
@@ -509,6 +514,7 @@
     },
     "strategies": {
       "monthly": "Monthly",
+      "monthlyRolling": "Monthly (rolling)",
       "weekly": "Weekly",
       "daily": "Daily",
       "noReset": "No reset"
@@ -556,6 +562,13 @@
     "bulkActions": "Bulk actions"
   },
   "userDetail": {
+    "strategies": {
+      "monthly": "Monthly",
+      "monthlyRolling": "Monthly (rolling)",
+      "weekly": "Weekly",
+      "daily": "Daily",
+      "noReset": "No reset"
+    },
     "notFound": "User not found",
     "backToList": "Back to list",
     "userNotFound": "User not found",
@@ -818,7 +831,11 @@
       "confirmRevokeDesc": "Node Agent will lose access.",
       "installAgent": "Install Agent",
       "installHint": "Run on the node server:",
-      "copyCommand": "Copy command"
+      "copyCommand": "Copy command",
+      "installed": "Installed",
+      "notInstalled": "Not installed",
+      "copied": "Copied!",
+      "node": "Node"
     },
     "stats": {
       "total": "Total",
@@ -841,16 +858,21 @@
       "create": "Create",
       "creating": "Creating...",
       "add": "Add",
-      "refresh": "Refresh"
+      "refresh": "Refresh",
+      "confirm": "Confirm",
+      "fetchUsersIps": "Users IPs"
     },
     "status": {
       "online": "Online",
       "offline": "Offline",
-      "disabled": "Disabled"
+      "disabled": "Disabled",
+      "never": "Never",
+      "noNodes": "No nodes added"
     },
     "deleteConfirm": {
       "title": "Delete node?",
-      "description": "Node will be deleted. This action cannot be undone."
+      "description": "Node will be deleted. This action cannot be undone.",
+      "confirm": "Delete"
     },
     "disableConfirm": {
       "title": "Disable node?",
@@ -866,7 +888,18 @@
       "saveError": "Save error",
       "createError": "Create error",
       "tokenGenerated": "Token generated",
-      "tokenRevoked": "Token revoked"
+      "tokenRevoked": "Token revoked",
+      "error": "Error"
+    },
+    "fetchUsersIps": {
+      "title": "Users IP Addresses",
+      "starting": "Starting scan...",
+      "scanning": "Scanning nodes...",
+      "failed": "Failed to fetch data",
+      "noResults": "No active connections found",
+      "found": "Found",
+      "users": "users",
+      "error": "Failed to start scan"
     }
   },
   "fleet": {
@@ -1126,6 +1159,15 @@
       "created": "Host created",
       "saveError": "Save error",
       "createError": "Create error"
+    }
+  },
+  "blocking": {
+    "title": "Blocking",
+    "description": "Manage IP blocks, HWID blacklist and whitelist",
+    "tabs": {
+      "ip": "IP Blocking",
+      "hwid": "HWID Blacklist",
+      "whitelist": "Whitelist"
     }
   },
   "blockedIPs": {
@@ -1767,8 +1809,13 @@
       "trends": "Trends",
       "sharedHwids": "Shared HWIDs",
       "providers": "Providers",
+      "nodesTraffic": "Node Traffic",
       "nodes": "Nodes",
       "retention": "Retention"
+    },
+    "nodesTraffic": {
+      "title": "Traffic by Nodes",
+      "noData": "No traffic data for this period"
     },
     "periods": {
       "day": "Day",

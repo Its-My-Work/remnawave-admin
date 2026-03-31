@@ -26,6 +26,7 @@ import {
   Wifi,
   Users as UsersIcon,
   Infinity,
+  Crosshair,
 } from 'lucide-react'
 import client from '../api/client'
 import { Button } from '@/components/ui/button'
@@ -612,6 +613,7 @@ function CreateUserModal({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="MONTH">{t('users.strategies.monthly')}</SelectItem>
+                      <SelectItem value="MONTH_ROLLING">{t('users.strategies.monthlyRolling')}</SelectItem>
                       <SelectItem value="WEEK">{t('users.strategies.weekly')}</SelectItem>
                       <SelectItem value="DAY">{t('users.strategies.daily')}</SelectItem>
                       <SelectItem value="NO_RESET">{t('users.strategies.noReset')}</SelectItem>
@@ -844,6 +846,20 @@ export default function Users() {
     return () => clearTimeout(timer)
   }, [search])
 
+  // Resolve user — universal lookup
+  const resolveMutation = useMutation({
+    mutationFn: async (query: string) => {
+      const { data } = await client.post('/users/resolve', { query })
+      return data
+    },
+    onSuccess: (data) => {
+      const uuid = data?.uuid || data?.response?.uuid
+      if (uuid) navigate(`/users/${uuid}`)
+      else toast.error(t('users.resolveNotFound'))
+    },
+    onError: () => toast.error(t('users.resolveNotFound')),
+  })
+
   // Fetch users
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['users', page, perPage, debouncedSearch, status, trafficType, expireFilter, onlineFilter, trafficUsage, sortBy, sortOrder],
@@ -1033,14 +1049,28 @@ export default function Users() {
         <CardContent className="p-4">
           <div className="flex flex-col gap-3">
             {/* Row 1: Search */}
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-200" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t('users.searchPlaceholder')}
-                className="pl-10"
-              />
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-200" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={t('users.searchPlaceholder')}
+                  className="pl-10"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && search.trim()) resolveMutation.mutate(search.trim())
+                  }}
+                />
+              </div>
+              <Button
+                variant="secondary"
+                size="icon"
+                disabled={!search.trim() || resolveMutation.isPending}
+                onClick={() => resolveMutation.mutate(search.trim())}
+                title={t('users.resolveButton')}
+              >
+                <Crosshair className={cn("w-4 h-4", resolveMutation.isPending && "animate-spin")} />
+              </Button>
             </div>
 
             {/* Row 2: Filters | Sort | Refresh */}

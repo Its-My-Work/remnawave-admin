@@ -104,7 +104,7 @@
     "fleet": "Fleet",
     "hosts": "Хосты",
     "violations": "Нарушения",
-    "blockedIPs": "Блокировка IP",
+    "blocking": "Блокировки",
     "automations": "Автоматизации",
     "notifications": "Уведомления",
     "admins": "Администраторы и роли",
@@ -295,6 +295,9 @@
     "statusUnknown": "Неизвестно",
     "ms": "мс",
     "sessions": "сессий",
+    "countries": "Стран",
+    "cores": "ядер",
+    "panelSince": "Работает с",
     "uptime": "Аптайм",
     "uptimeDH": "{{days}}д {{hours}}ч",
     "uptimeHM": "{{hours}}ч {{minutes}}м",
@@ -395,6 +398,8 @@
     "createdAt": "Создан",
     "lastActive": "Последняя активность",
     "searchPlaceholder": "Поиск по имени, email или UUID...",
+    "resolveButton": "Найти точно",
+    "resolveNotFound": "Пользователь не найден",
     "noUsers": "Нет пользователей",
     "usersNotFound": "Пользователи не найдены",
     "createUser": "Создать пользователя",
@@ -509,6 +514,7 @@
     },
     "strategies": {
       "monthly": "Ежемесячно",
+      "monthlyRolling": "Месяц (скользящий)",
       "weekly": "Еженедельно",
       "daily": "Ежедневно",
       "noReset": "Без сброса"
@@ -556,6 +562,13 @@
     "bulkActions": "Массовые действия"
   },
   "userDetail": {
+    "strategies": {
+      "monthly": "Ежемесячно",
+      "monthlyRolling": "Месяц (скользящий)",
+      "weekly": "Еженедельно",
+      "daily": "Ежедневно",
+      "noReset": "Без сброса"
+    },
     "notFound": "Пользователь не найден",
     "backToList": "Вернуться к списку",
     "userNotFound": "Пользователь не найден",
@@ -818,7 +831,11 @@
       "confirmRevokeDesc": "Node Agent потеряет доступ.",
       "installAgent": "Установить агент",
       "installHint": "Выполните на сервере ноды:",
-      "copyCommand": "Копировать команду"
+      "copyCommand": "Копировать команду",
+      "installed": "Установлен",
+      "notInstalled": "Не установлен",
+      "copied": "Скопировано!",
+      "node": "Нода"
     },
     "stats": {
       "total": "Всего",
@@ -841,16 +858,21 @@
       "create": "Создать",
       "creating": "Создание...",
       "add": "Добавить",
-      "refresh": "Обновить"
+      "refresh": "Обновить",
+      "confirm": "Подтвердить",
+      "fetchUsersIps": "IP пользователей"
     },
     "status": {
       "online": "Онлайн",
       "offline": "Офлайн",
-      "disabled": "Отключён"
+      "disabled": "Отключён",
+      "never": "Никогда",
+      "noNodes": "Нет добавленных нод"
     },
     "deleteConfirm": {
       "title": "Удалить ноду?",
-      "description": "Нода будет удалена. Это действие нельзя отменить."
+      "description": "Нода будет удалена. Это действие нельзя отменить.",
+      "confirm": "Удалить"
     },
     "disableConfirm": {
       "title": "Отключить ноду?",
@@ -866,7 +888,18 @@
       "saveError": "Ошибка сохранения",
       "createError": "Ошибка создания",
       "tokenGenerated": "Токен сгенерирован",
-      "tokenRevoked": "Токен отозван"
+      "tokenRevoked": "Токен отозван",
+      "error": "Ошибка"
+    },
+    "fetchUsersIps": {
+      "title": "IP-адреса пользователей",
+      "starting": "Запуск сканирования...",
+      "scanning": "Сканирование нод...",
+      "failed": "Не удалось получить данные",
+      "noResults": "Активных подключений не найдено",
+      "found": "Найдено",
+      "users": "пользователей",
+      "error": "Ошибка запуска сканирования"
     }
   },
   "fleet": {
@@ -1126,6 +1159,15 @@
       "created": "Хост создан",
       "saveError": "Ошибка сохранения",
       "createError": "Ошибка создания"
+    }
+  },
+  "blocking": {
+    "title": "Блокировки",
+    "description": "Управление блокировками IP, HWID и белым списком",
+    "tabs": {
+      "ip": "Блокировка IP",
+      "hwid": "HWID Blacklist",
+      "whitelist": "Белый список"
     }
   },
   "blockedIPs": {
@@ -1767,8 +1809,13 @@
       "trends": "Тренды",
       "sharedHwids": "Общие HWID",
       "providers": "Провайдеры",
+      "nodesTraffic": "Трафик по нодам",
       "nodes": "Ноды",
       "retention": "Ретенция"
+    },
+    "nodesTraffic": {
+      "title": "Трафик по нодам",
+      "noData": "Нет данных о трафике за этот период"
     },
     "periods": {
       "day": "День",
