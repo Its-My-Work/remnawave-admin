@@ -275,6 +275,9 @@ async def _compute_top_users_range(date_from: str, date_to: str, limit: int = 20
     try:
         from web.backend.core.api_helper import fetch_nodes_usage_by_range
         resp = await fetch_nodes_usage_by_range(date_from, date_to, top_nodes_limit=100)
+        logger.info("top-users-range response keys: %s, topNodes count: %s",
+                     list(resp.keys()) if isinstance(resp, dict) else type(resp),
+                     len(resp.get("topNodes", [])) if isinstance(resp, dict) else "N/A")
         if not resp:
             return {"items": [], "period": {"from": date_from, "to": date_to}}
 
@@ -283,7 +286,7 @@ async def _compute_top_users_range(date_from: str, date_to: str, limit: int = 20
         from shared.database import db_service
 
         # Get per-node user usage and aggregate
-        nodes_data = resp.get("topNodes", [])
+        nodes_data = resp.get("topNodes") or resp.get("nodes") or []
         user_traffic: Dict[str, int] = {}
 
         for node in nodes_data[:20]:  # Limit to top 20 nodes to avoid too many API calls
@@ -295,12 +298,18 @@ async def _compute_top_users_range(date_from: str, date_to: str, limit: int = 20
                     node_uuid, date_from, date_to, top_users_limit=limit
                 )
                 payload = node_users.get("response", node_users) if isinstance(node_users, dict) else {}
-                for u in payload.get("topUsers", []):
-                    uid = u.get("uuid", "")
-                    traffic = int(u.get("total", 0) or 0)
-                    user_traffic[uid] = user_traffic.get(uid, 0) + traffic
+                logger.debug("Node %s users usage keys: %s", node_uuid[:8], list(payload.keys()) if isinstance(payload, dict) else type(payload))
+                # Try different possible response structures
+                users_list = payload.get("topUsers") or payload.get("users") or []
+                if isinstance(payload, list):
+                    users_list = payload
+                for u in users_list:
+                    uid = u.get("uuid") or u.get("userUuid") or ""
+                    traffic = int(u.get("total") or u.get("totalBytes") or u.get("traffic") or 0)
+                    if uid and traffic > 0:
+                        user_traffic[uid] = user_traffic.get(uid, 0) + traffic
             except Exception as e:
-                logger.debug("Failed to get node %s users usage: %s", node_uuid, e)
+                logger.debug("Failed to get node %s users usage: %s", node_uuid[:8], e)
 
         # Sort by traffic and enrich with user info from DB
         sorted_users = sorted(user_traffic.items(), key=lambda x: x[1], reverse=True)[:limit]
@@ -354,10 +363,13 @@ async def get_nodes_traffic(
     try:
         from web.backend.core.api_helper import fetch_nodes_usage_by_range
         resp = await fetch_nodes_usage_by_range(date_from, date_to, top_nodes_limit=100)
+        logger.info("nodes-traffic response keys: %s", list(resp.keys()) if isinstance(resp, dict) else type(resp))
         if not resp:
             return {"items": [], "total_bytes": 0, "period": {"from": date_from, "to": date_to}}
 
-        nodes_data = resp.get("topNodes", [])
+        nodes_data = resp.get("topNodes") or resp.get("nodes") or []
+        if not nodes_data and isinstance(resp, dict):
+            logger.info("nodes-traffic full resp sample: %s", str(resp)[:500])
 
         # Enrich with node names from DB
         from shared.database import db_service
