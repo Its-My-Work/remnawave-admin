@@ -215,29 +215,53 @@ class TrafficRateMonitor:
             rate = violator["rate_gb_per_hour"]
             threshold = cfg["threshold_gb"]
 
-            # Fetch node names for this user
-            nodes_str = ""
+            # Fetch user details + node names
+            extra_lines = []
             try:
                 async with db_service.acquire() as conn:
-                    rows = await conn.fetch(
-                        "SELECT n.name FROM user_node_traffic unt "
+                    user_row = await conn.fetchrow(
+                        "SELECT status, used_traffic_bytes, traffic_limit_bytes, "
+                        "expire_at, description, short_uuid "
+                        "FROM users WHERE uuid = $1",
+                        user_uuid,
+                    )
+                    node_rows = await conn.fetch(
+                        "SELECT n.name, unt.traffic_bytes FROM user_node_traffic unt "
                         "JOIN nodes n ON unt.node_uuid = n.uuid "
                         "WHERE unt.user_uuid = $1::uuid AND unt.traffic_bytes > 0 "
                         "ORDER BY unt.traffic_bytes DESC LIMIT 5",
                         user_uuid,
                     )
-                if rows:
-                    nodes_str = "\nНоды: " + ", ".join(f"<code>{_esc(r['name'])}</code>" for r in rows)
+                if user_row:
+                    status = (user_row["status"] or "unknown").upper()
+                    used = user_row["used_traffic_bytes"] or 0
+                    limit = user_row["traffic_limit_bytes"] or 0
+                    used_gb = round(used / (1024 ** 3), 2)
+                    limit_str = f"{round(limit / (1024 ** 3), 1)} GB" if limit > 0 else "∞"
+                    extra_lines.append(f"📊 Статус: <b>{_esc(status)}</b> | Трафик: <b>{used_gb}</b> / {limit_str}")
+                    if user_row["expire_at"]:
+                        exp = user_row["expire_at"]
+                        exp_str = exp.strftime("%d.%m.%Y") if hasattr(exp, "strftime") else str(exp)[:10]
+                        extra_lines.append(f"📅 Истекает: {exp_str}")
+                    if user_row["description"]:
+                        extra_lines.append(f"📝 {_esc(user_row['description'])}")
+                    if user_row["short_uuid"]:
+                        extra_lines.append(f"🔑 <code>{_esc(user_row['short_uuid'])}</code>")
+                if node_rows:
+                    nodes = ", ".join(f"<code>{_esc(r['name'])}</code>" for r in node_rows)
+                    extra_lines.append(f"🖥 Ноды: {nodes}")
             except Exception:
                 pass
 
+            extra_block = "\n" + "\n".join(extra_lines) if extra_lines else ""
+
             title = f"⚡ Высокое потребление трафика"
             body = (
-                f"Пользователь <code>{_esc(username)}</code> потребил "
-                f"<b>{delta_gb} GB</b> за {elapsed} мин "
+                f"👤 <code>{_esc(username)}</code>\n\n"
+                f"🔥 Потребил <b>{delta_gb} GB</b> за {elapsed} мин "
                 f"(~{rate} GB/ч)\n"
-                f"Порог: {threshold} GB / {cfg['window_minutes']} мин"
-                f"{nodes_str}"
+                f"⚠️ Порог: {threshold} GB / {cfg['window_minutes']} мин"
+                f"{extra_block}"
             )
 
             keyboard = {
