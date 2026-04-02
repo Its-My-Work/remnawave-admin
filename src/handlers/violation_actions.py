@@ -122,7 +122,7 @@ async def _kill_user(callback: CallbackQuery, user_uuid: str) -> None:
         # 2. Drop all connections
         try:
             await api_client.drop_connections(
-                drop_by={"dropByUuid": user_uuid},
+                drop_by={"by": "userUuids", "userUuids": [user_uuid]},
                 target_nodes={"target": "allNodes"},
             )
         except Exception as e:
