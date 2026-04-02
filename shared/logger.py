@@ -106,8 +106,12 @@ def _shorten_logger_name(logger: object, method_name: str, event_dict: dict) -> 
 
 
 def _compact_kv(logger: object, method_name: str, event_dict: dict) -> dict:
-    """structlog processor: компактный формат для api_call и api_error."""
+    """structlog processor: компактный формат для api_call, api_error и длинных строк."""
     event = event_dict.get("event", "")
+    # Truncate very long event strings (e.g. httpx response headers)
+    if isinstance(event, str) and len(event) > 200:
+        event_dict["event"] = event[:197] + "..."
+        event = event_dict["event"]
     if event == "api_call":
         method = event_dict.pop("method", "")
         endpoint = event_dict.pop("endpoint", "")
@@ -151,11 +155,11 @@ _LEVEL_STYLES = {
 
 
 def _make_console_renderer() -> structlog.dev.ConsoleRenderer:
-    """Создаёт ConsoleRenderer с красивым форматированием."""
+    """Создаёт ConsoleRenderer с красивым форматированием для SSH терминала."""
     return structlog.dev.ConsoleRenderer(
         colors=True,
         force_colors=True,
-        pad_event_to=40,
+        pad_event_to=50,
         level_styles=_LEVEL_STYLES,
     )
 
