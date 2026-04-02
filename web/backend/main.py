@@ -475,6 +475,13 @@ async def lifespan(app: FastAPI):
                     await sync_service.start()
                 except Exception as e:
                     logger.warning("Sync service start failed: %s", e)
+
+                # Traffic rate monitor — alerts on high traffic consumption
+                try:
+                    from web.backend.core.traffic_rate_monitor import traffic_rate_monitor
+                    await traffic_rate_monitor.start()
+                except Exception as e:
+                    logger.warning("Traffic rate monitor start failed: %s", e)
             else:
                 logger.warning("Database connection failed")
         except Exception as e:
@@ -550,6 +557,11 @@ async def lifespan(app: FastAPI):
         from shared.sync import sync_service
         if sync_service.is_running:
             await sync_service.stop()
+    except Exception:
+        pass
+    try:
+        from web.backend.core.traffic_rate_monitor import traffic_rate_monitor
+        await traffic_rate_monitor.stop()
     except Exception:
         pass
     try:
