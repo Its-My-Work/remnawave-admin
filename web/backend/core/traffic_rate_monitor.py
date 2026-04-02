@@ -213,7 +213,7 @@ class TrafficRateMonitor:
 
             title = f"⚡ Высокое потребление трафика"
             body = (
-                f"Пользователь <b>{_esc(username)}</b> потребил "
+                f"Пользователь <code>{_esc(username)}</code> потребил "
                 f"<b>{delta_gb} GB</b> за {elapsed} мин "
                 f"(~{rate} GB/ч)\n"
                 f"Порог: {threshold} GB / {cfg['window_minutes']} мин"

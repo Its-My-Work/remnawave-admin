@@ -420,7 +420,7 @@ async def create_notification(
         # Dispatch to external channels (per-admin configured channels)
         if admin_id is not None:
             per_admin_tg_chat_ids = await _collect_telegram_chat_ids(admin_id)
-            asyncio.create_task(_dispatch_external(admin_id, title, tg_body, severity, link, channels))
+            asyncio.create_task(_dispatch_external(admin_id, title, tg_body, severity, link, channels, reply_markup=reply_markup))
         else:
             # For broadcasts, dispatch to all admins' external channels
             try:
@@ -433,7 +433,7 @@ async def create_notification(
                         aid_chat_ids = await _collect_telegram_chat_ids(row["id"])
                         per_admin_tg_chat_ids.update(aid_chat_ids)
                         asyncio.create_task(
-                            _dispatch_external(row["id"], title, tg_body, severity, link, channels)
+                            _dispatch_external(row["id"], title, tg_body, severity, link, channels, reply_markup=reply_markup)
                         )
                 else:
                     logger.debug("No admin_accounts found for external dispatch")
@@ -515,6 +515,7 @@ async def _dispatch_external(
     severity: str,
     link: Optional[str],
     requested_channels: List[str],
+    reply_markup: Optional[Dict[str, Any]] = None,
 ):
     """Dispatch notification to external channels based on admin's channel config."""
     try:
@@ -549,7 +550,7 @@ async def _dispatch_external(
                     bot_token_override = config.get("bot_token")
                     if chat_id:
                         logger.info("Dispatching Telegram to chat_id=%s for admin_id=%s", chat_id, admin_id)
-                        await send_telegram(chat_id, title, body, topic_id, bot_token_override)
+                        await send_telegram(chat_id, title, body, topic_id, bot_token_override, reply_markup=reply_markup)
                     else:
                         logger.warning("Telegram channel for admin %s has no chat_id in config: %s", admin_id, config)
 
