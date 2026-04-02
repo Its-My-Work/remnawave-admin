@@ -70,6 +70,8 @@ class TrafficRateMonitor:
                 if not cfg["enabled"]:
                     continue
 
+                logger.debug("Traffic rate check: threshold=%.1f GB, window=%d min, users tracked=%d",
+                             cfg["threshold_gb"], cfg["window_minutes"], len(self._snapshots))
                 await self._check_traffic_rates(cfg)
 
             except asyncio.CancelledError:
@@ -89,23 +91,52 @@ class TrafficRateMonitor:
         window_seconds = cfg["window_minutes"] * 60
         cooldown_seconds = cfg["cooldown_minutes"] * 60
 
-        # Fetch current raw traffic for all users
+        # Fetch fresh traffic from Panel API (most up-to-date source)
+        traffic_map: dict[str, int] = {}
+        username_map: dict[str, str] = {}
         try:
-            async with db_service.acquire() as conn:
-                rows = await conn.fetch(
-                    "SELECT uuid::text, username, raw_used_traffic_bytes, traffic_limit_bytes "
-                    "FROM users WHERE raw_used_traffic_bytes > 0"
-                )
+            from shared.api_client import api_client
+            page = 0
+            while True:
+                resp = await api_client.get_users(start=page * 100, size=100)
+                users_list = resp.get("response", resp) if isinstance(resp, dict) else resp
+                if isinstance(users_list, dict):
+                    users_list = users_list.get("users", [])
+                if not users_list:
+                    break
+                for u in users_list:
+                    uid = u.get("uuid")
+                    if not uid:
+                        continue
+                    ut = u.get("userTraffic") or {}
+                    ut_val = ut.get("usedTrafficBytes")
+                    used = int(ut_val if ut_val is not None else (u.get("usedTrafficBytes") or 0))
+                    if used > 0:
+                        traffic_map[uid] = used
+                        username_map[uid] = u.get("username") or uid[:8]
+                page += 1
+                if len(users_list) < 100:
+                    break
         except Exception as e:
-            logger.warning("Failed to fetch user traffic: %s", e)
-            return
+            logger.warning("Failed to fetch users from API, falling back to DB: %s", e)
+            # Fallback: use DB data
+            try:
+                async with db_service.acquire() as conn:
+                    rows = await conn.fetch(
+                        "SELECT uuid::text, username, used_traffic_bytes "
+                        "FROM users WHERE used_traffic_bytes > 0"
+                    )
+                for row in rows:
+                    traffic_map[row["uuid"]] = int(row["used_traffic_bytes"])
+                    username_map[row["uuid"]] = row["username"] or row["uuid"][:8]
+            except Exception as e2:
+                logger.warning("Failed to fetch user traffic from DB: %s", e2)
+                return
 
         violators = []
 
-        for row in rows:
-            user_uuid = row["uuid"]
-            current_bytes = int(row["raw_used_traffic_bytes"])
-            username = row["username"] or user_uuid[:8]
+        for user_uuid, current_bytes in traffic_map.items():
+            username = username_map.get(user_uuid, user_uuid[:8])
 
             # Record snapshot
             self._snapshots[user_uuid].append((now, current_bytes))
@@ -151,7 +182,6 @@ class TrafficRateMonitor:
                     "delta_gb": round(delta_gb, 2),
                     "elapsed_minutes": round(elapsed_min, 0),
                     "rate_gb_per_hour": round(rate_gbh, 2),
-                    "traffic_limit_bytes": row["traffic_limit_bytes"],
                 })
                 self._notified[user_uuid] = now
 
