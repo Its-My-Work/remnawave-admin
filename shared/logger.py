@@ -106,12 +106,18 @@ def _shorten_logger_name(logger: object, method_name: str, event_dict: dict) -> 
 
 
 def _compact_kv(logger: object, method_name: str, event_dict: dict) -> dict:
-    """structlog processor: компактный формат для api_call, api_error и длинных строк."""
+    """structlog processor: форматирует key-value пары в фиксированные столбцы.
+
+    Результат: event string включает все параметры с фиксированной шириной,
+    а extra-ключи удаляются чтобы ConsoleRenderer не дублировал их.
+    """
     event = event_dict.get("event", "")
-    # Truncate very long event strings (e.g. httpx response headers)
+
+    # Truncate very long event strings
     if isinstance(event, str) and len(event) > 200:
-        event_dict["event"] = event[:197] + "..."
-        event = event_dict["event"]
+        event = event[:197] + "..."
+
+    # API call / error — compact single-line format
     if event == "api_call":
         method = event_dict.pop("method", "")
         endpoint = event_dict.pop("endpoint", "")
@@ -125,6 +131,7 @@ def _compact_kv(logger: object, method_name: str, event_dict: dict) -> dict:
         if duration:
             parts.append(f"({duration}ms)")
         event_dict["event"] = " ".join(parts) if parts else event
+        return event_dict
     elif event == "api_error":
         method = event_dict.pop("method", "")
         endpoint = event_dict.pop("endpoint", "")
@@ -138,6 +145,28 @@ def _compact_kv(logger: object, method_name: str, event_dict: dict) -> dict:
         if error:
             parts.append(f"| {error}")
         event_dict["event"] = " ".join(parts) if parts else event
+        return event_dict
+
+    # Collect all extra keys (not structlog internals)
+    _INTERNAL = {"event", "logger", "level", "timestamp", "_record", "_from_structlog"}
+    extras = {k: v for k, v in event_dict.items() if k not in _INTERNAL}
+
+    if not extras:
+        event_dict["event"] = event
+        return event_dict
+
+    # Build columnar output: event | key=value (padded)
+    COL_WIDTH = 18  # width per key=value column
+    cols = []
+    for k, v in extras.items():
+        cell = f"{k}={v}"
+        cols.append(cell.ljust(COL_WIDTH))
+
+    # Remove extras from event_dict so ConsoleRenderer won't re-print them
+    for k in extras:
+        del event_dict[k]
+
+    event_dict["event"] = f"{event.ljust(20)}  {'  '.join(cols)}"
     return event_dict
 
 
