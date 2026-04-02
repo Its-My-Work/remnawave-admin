@@ -217,6 +217,7 @@ class TrafficRateMonitor:
 
             # Fetch user details + node names
             extra_lines = []
+            node_rows = []
             try:
                 async with db_service.acquire() as conn:
                     user_row = await conn.fetchrow(
@@ -292,6 +293,24 @@ class TrafficRateMonitor:
                 topic_type="violations",
                 telegram_body=body,
                 reply_markup=keyboard,
+            )
+
+            # Save as violation so it appears on the Violations page
+            node_names = [r["name"] for r in node_rows] if node_rows else []
+            reason = (
+                f"Потребление {delta_gb} GB за {elapsed} мин (~{rate} GB/ч), "
+                f"порог {threshold} GB / {cfg['window_minutes']} мин"
+            )
+            if node_names:
+                reason += f" | Ноды: {', '.join(node_names)}"
+
+            await db_service.save_violation(
+                user_uuid=user_uuid,
+                username=username,
+                score=min(rate / 10, 10.0),  # normalize: 10 GB/h → 1.0, 100 GB/h → 10.0
+                recommended_action="monitor",
+                confidence=0.9,
+                reasons=[reason],
             )
         except Exception as e:
             logger.error("Failed to send traffic rate notification for %s: %s",
