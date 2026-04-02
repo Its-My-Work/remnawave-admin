@@ -189,21 +189,32 @@ class TrafficRateMonitor:
                 f"Порог: {threshold} GB / {cfg['window_minutes']} мин"
             )
 
+            user_uuid = violator["user_uuid"]
+            keyboard = {
+                "inline_keyboard": [
+                    [
+                        {"text": "👤 Подробнее", "callback_data": f"vact:info:{user_uuid}"},
+                        {"text": "🔒 Заблокировать", "callback_data": f"vact:block:{user_uuid}"},
+                    ],
+                    [
+                        {"text": "✅ Пропустить", "callback_data": f"vact:dismiss:{user_uuid}"},
+                        {"text": "🔄 Сбросить трафик", "callback_data": f"vact:reset:{user_uuid}"},
+                    ],
+                ]
+            }
+
             await create_notification(
                 title=title,
                 body=body,
-                notification_type="traffic_rate",
+                type="traffic_rate",
                 severity="warning",
                 source="traffic_rate_monitor",
+                source_id=user_uuid,
+                group_key=f"traffic_rate:{user_uuid}",
                 channels=["telegram", "in_app"],
                 topic_type="violations",
-                metadata={
-                    "user_uuid": violator["user_uuid"],
-                    "username": username,
-                    "delta_gb": delta_gb,
-                    "rate_gb_per_hour": rate,
-                    "threshold_gb": threshold,
-                },
+                telegram_body=body,
+                reply_markup=keyboard,
             )
         except Exception as e:
             logger.error("Failed to send traffic rate notification for %s: %s",

@@ -46,6 +46,22 @@ def _short_provider(asn_org: Optional[str]) -> str:
     return asn_org
 
 
+def _violation_keyboard(user_uuid: str) -> Dict:
+    """Build inline keyboard with quick actions for violation notifications."""
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "👤 Подробнее", "callback_data": f"vact:info:{user_uuid}"},
+                {"text": "🔒 Заблокировать", "callback_data": f"vact:block:{user_uuid}"},
+            ],
+            [
+                {"text": "✅ Пропустить", "callback_data": f"vact:dismiss:{user_uuid}"},
+                {"text": "🔄 Сбросить трафик", "callback_data": f"vact:reset:{user_uuid}"},
+            ],
+        ]
+    }
+
+
 async def send_violation_notification(
     user_uuid: str,
     violation_score: dict,
@@ -319,6 +335,7 @@ async def send_violation_notification(
             channels=["telegram", "in_app"],
             topic_type="violations",
             telegram_body=body,
+            reply_markup=_violation_keyboard(user_uuid),
         )
 
         # Update throttling: persistent DB + in-memory fallback
@@ -411,7 +428,7 @@ async def send_torrent_notification(
 
         from web.backend.core.notification_service import create_notification
         await create_notification(
-            title="\u0422\u043e\u0440\u0440\u0435\u043d\u0442 \u0442\u0440\u0430\u0444\u0438\u043a \u043e\u0431\u043d\u0430\u0440\u0443\u0436\u0435\u043d",
+            title="Торрент трафик обнаружен",
             body=plain_body,
             type="torrent",
             severity="critical",
@@ -421,6 +438,7 @@ async def send_torrent_notification(
             channels=["telegram", "in_app"],
             topic_type="violations",
             telegram_body=body,
+            reply_markup=_violation_keyboard(user_uuid),
         )
 
         _violation_notification_cache[user_uuid] = datetime.utcnow()
