@@ -592,9 +592,7 @@ remnawave-admin/
 
 | Документ | Описание |
 |----------|----------|
-| [CHANGELOG.md](CHANGELOG.md) | История версий |
 | [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md) | Настройка webhook |
-| [docs/anti-abuse.md](docs/anti-abuse.md) | Anti-Abuse система, база ASN, классификация провайдеров |
 | [web/README.md](web/README.md) | Веб-панель: настройка, реверс-прокси, API |
 | [web/SECURITY_AUDIT.md](web/SECURITY_AUDIT.md) | Аудит безопасности веб-панели |
 | [node-agent/README.md](node-agent/README.md) | Node Agent: установка, настройка, troubleshooting |
