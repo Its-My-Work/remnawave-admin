@@ -226,12 +226,15 @@ class TrafficRateMonitor:
                         "FROM users WHERE uuid = $1",
                         user_uuid,
                     )
+                    # Only show nodes the user connected to during the violation window
+                    window_minutes = cfg["window_minutes"]
                     node_rows = await conn.fetch(
-                        "SELECT n.name, unt.traffic_bytes FROM user_node_traffic unt "
-                        "JOIN nodes n ON unt.node_uuid = n.uuid "
-                        "WHERE unt.user_uuid = $1::uuid AND unt.traffic_bytes > 0 "
-                        "ORDER BY unt.traffic_bytes DESC LIMIT 5",
-                        user_uuid,
+                        "SELECT DISTINCT n.name FROM user_connections uc "
+                        "JOIN nodes n ON uc.node_uuid = n.uuid "
+                        "WHERE uc.user_uuid = $1::uuid "
+                        "AND uc.connected_at >= NOW() - make_interval(mins := $2) "
+                        "ORDER BY n.name LIMIT 10",
+                        user_uuid, window_minutes,
                     )
                 if user_row:
                     status = (user_row["status"] or "unknown").upper()
