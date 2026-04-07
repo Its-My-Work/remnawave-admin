@@ -933,6 +933,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "default_value": "20",
         "sort_order": 42,
     },
+    {
+        "key": "violation_notification_cooldown_minutes",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "violation_pipeline",
+        "display_name": "Кулдаун уведомлений (минуты)",
+        "description": "Минимальный интервал между повторными уведомлениями по одному пользователю. Защита от спама.",
+        "default_value": "30",
+        "sort_order": 43,
+    },
 ]
 
 
