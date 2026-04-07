@@ -171,9 +171,9 @@ docker compose logs -f bot
 
 ---
 
-### Шаг 4️⃣ — Веб-панель (опционально)
+### Шаг 4️⃣ — Веб-панель
 
-Если хотите веб-интерфейс — добавьте в `.env`:
+Добавьте в `.env`:
 
 ```env
 # 🌐 Веб-панель
@@ -192,13 +192,13 @@ WEB_CORS_ORIGINS=https://admin.yourdomain.com
 
 > 💡 **Авторизация**: При первом входе создайте аккаунт администратора. Поддерживается вход через Telegram Login Widget и по паролю. Можно включить 2FA (TOTP). Система RBAC позволяет создавать роли с гранулярными правами доступа.
 
-Запустите с профилем `web`:
+Веб-панель запускается вместе с ботом:
 
 ```bash
-docker compose --profile web up -d
+docker compose up -d
 ```
 
-Веб-панель будет доступна на портах: **frontend :3000**, **backend :8081**.
+Порты: **frontend :3000**, **backend :8081**.
 
 > 📖 Подробнее о настройке домена и реверс-прокси: [web/README.md](web/README.md)
 
@@ -510,7 +510,7 @@ python -m src.main
 | `BEDOLAGA_API_URL` | — | URL API Bedolaga Bot |
 | `BEDOLAGA_API_TOKEN` | — | Токен аутентификации Bedolaga |
 
-*\* Обязательно только при запуске с `--profile web`*
+*\* Обязательно для работы веб-панели*
 
 ### 📧 Почтовый сервер
 
@@ -583,7 +583,7 @@ remnawave-admin/
 ├── node-agent/                 # Агент сбора данных с нод (Command Channel, скрипты)
 ├── alembic/                    # Миграции БД
 ├── locales/                    # Локализация (ru, en)
-└── docker-compose.yml          # Docker Compose (профили: bot, web)
+└── docker-compose.yml          # Docker Compose (бот + веб-панель + БД)
 ```
 
 ---
