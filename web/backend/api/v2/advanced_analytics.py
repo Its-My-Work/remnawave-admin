@@ -1410,7 +1410,7 @@ async def export_ips(
     request: Request,
     date_from: str = Query(..., description="Start date YYYY-MM-DD"),
     date_to: str = Query(..., description="End date YYYY-MM-DD"),
-    node_uuid: Optional[str] = Query(None),
+    node_uuids: Optional[str] = Query(None, description="Comma-separated node UUIDs"),
     username: Optional[str] = Query(None),
     active_only: bool = Query(False),
     admin: AdminUser = Depends(require_permission("analytics", "view")),
@@ -1418,13 +1418,13 @@ async def export_ips(
     """Export unique IPs with metadata for the given period and filters."""
     return await _compute_export_ips(
         date_from=date_from, date_to=date_to,
-        node_uuid=node_uuid, username=username, active_only=active_only,
+        node_uuids=node_uuids, username=username, active_only=active_only,
     )
 
 
 async def _compute_export_ips(
     date_from: str, date_to: str,
-    node_uuid: Optional[str] = None,
+    node_uuids: Optional[str] = None,
     username: Optional[str] = None,
     active_only: bool = False,
 ):
@@ -1445,10 +1445,12 @@ async def _compute_export_ips(
         params: list = [start, end]
         idx = 3
 
-        if node_uuid:
-            conditions.append(f"uc.node_uuid = ${idx}::uuid")
-            params.append(node_uuid)
-            idx += 1
+        if node_uuids:
+            uuids = [u.strip() for u in node_uuids.split(",") if u.strip()]
+            if uuids:
+                conditions.append(f"uc.node_uuid = ANY(${idx}::uuid[])")
+                params.append(uuids)
+                idx += 1
 
         if username:
             conditions.append(f"LOWER(u.username) = LOWER(${idx})")

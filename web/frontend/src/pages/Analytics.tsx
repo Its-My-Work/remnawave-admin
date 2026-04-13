@@ -1493,7 +1493,8 @@ function IpExportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
 
   const [dateFrom, setDateFrom] = useState(weekAgo)
   const [dateTo, setDateTo] = useState(today)
-  const [nodeUuid, setNodeUuid] = useState('')
+  const [selectedNodes, setSelectedNodes] = useState<string[]>([])
+  const [nodesDropdownOpen, setNodesDropdownOpen] = useState(false)
   const [username, setUsername] = useState('')
   const [activeOnly, setActiveOnly] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -1514,7 +1515,7 @@ function IpExportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
       const resp = await advancedAnalyticsApi.exportIps({
         date_from: dateFrom,
         date_to: dateTo,
-        node_uuid: nodeUuid || undefined,
+        node_uuids: selectedNodes.length ? selectedNodes.join(',') : undefined,
         username: username || undefined,
         active_only: activeOnly,
       })
@@ -1533,7 +1534,7 @@ function IpExportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
       const resp = await advancedAnalyticsApi.exportIps({
         date_from: dateFrom,
         date_to: dateTo,
-        node_uuid: nodeUuid || undefined,
+        node_uuids: selectedNodes.length ? selectedNodes.join(',') : undefined,
         username: username || undefined,
         active_only: activeOnly,
       })
@@ -1576,15 +1577,50 @@ function IpExportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
             <label className="block text-xs text-muted-foreground mb-1">{t('common.dateTo', { defaultValue: 'To' })}</label>
             <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1">{t('analytics.providers.node', { defaultValue: 'Node' })}</label>
-            <Select value={nodeUuid || '__all__'} onValueChange={(v) => setNodeUuid(v === '__all__' ? '' : v)}>
-              <SelectTrigger><SelectValue placeholder={t('common.all', { defaultValue: 'All' })} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">{t('common.all', { defaultValue: 'All' })}</SelectItem>
-                {nodes.map((n) => <SelectItem key={n.uuid} value={n.uuid}>{n.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+          <div className="relative">
+            <label className="block text-xs text-muted-foreground mb-1">{t('analytics.providers.nodes', { defaultValue: 'Nodes' })}</label>
+            <button
+              type="button"
+              onClick={() => setNodesDropdownOpen(!nodesDropdownOpen)}
+              className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              <span className="truncate text-left">
+                {selectedNodes.length === 0
+                  ? t('common.all', { defaultValue: 'All' })
+                  : `${selectedNodes.length} ${t('analytics.providers.selected', { defaultValue: 'selected' })}`}
+              </span>
+              <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+            </button>
+            {nodesDropdownOpen && (
+              <div className="absolute z-50 mt-1 w-full rounded-md border border-[var(--glass-border)] bg-popover p-1 shadow-md max-h-48 overflow-y-auto">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent"
+                  onClick={() => { setSelectedNodes([]); setNodesDropdownOpen(false) }}
+                >
+                  <div className={cn('h-3.5 w-3.5 rounded border flex items-center justify-center', selectedNodes.length === 0 ? 'bg-primary border-primary' : 'border-muted-foreground')}>
+                    {selectedNodes.length === 0 && <span className="text-primary-foreground text-[9px]">✓</span>}
+                  </div>
+                  {t('common.all', { defaultValue: 'All' })}
+                </button>
+                {nodes.map((n) => {
+                  const checked = selectedNodes.includes(n.uuid)
+                  return (
+                    <button
+                      key={n.uuid}
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent"
+                      onClick={() => setSelectedNodes(checked ? selectedNodes.filter((id) => id !== n.uuid) : [...selectedNodes, n.uuid])}
+                    >
+                      <div className={cn('h-3.5 w-3.5 rounded border flex items-center justify-center', checked ? 'bg-primary border-primary' : 'border-muted-foreground')}>
+                        {checked && <span className="text-primary-foreground text-[9px]">✓</span>}
+                      </div>
+                      {n.name}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-xs text-muted-foreground mb-1">{t('analytics.providers.username', { defaultValue: 'Username' })}</label>

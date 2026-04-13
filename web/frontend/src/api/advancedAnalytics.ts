@@ -277,7 +277,7 @@ export const advancedAnalyticsApi = {
   exportIps: async (params: {
     date_from: string
     date_to: string
-    node_uuid?: string
+    node_uuids?: string
     username?: string
     active_only?: boolean
   }): Promise<IpExportResponse> => {
