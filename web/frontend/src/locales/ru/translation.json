@@ -1439,7 +1439,9 @@
       "asn": "ASN (тип провайдера)",
       "profile": "Профиль (отклонение поведения)",
       "device": "Устройства (fingerprint)",
-      "hwid": "HWID (кросс-аккаунт)"
+      "hwid": "HWID (кросс-аккаунт)",
+      "traffic_rate": "Трафик (чрезмерное потребление)",
+      "torrent": "Торрент (P2P трафик)"
     },
     "exclusions": {
       "mode": "Режим исключения",
@@ -1811,10 +1813,14 @@
       "topUsers": "Топ юзеры",
       "trends": "Тренды",
       "sharedHwids": "Общие HWID",
-      "providers": "Провайдеры",
+      "providers": "Провайдеры / IP",
       "nodesTraffic": "Трафик по нодам",
       "nodes": "Ноды",
-      "retention": "Ретенция"
+      "retention": "Ретенция",
+      "geoBalance": "Гео-баланс",
+      "torrent": "P2P / Torrent",
+      "churn": "Отток",
+      "ltv": "LTV"
     },
     "nodesTraffic": {
       "title": "Трафик по нодам",
@@ -1929,7 +1935,18 @@
         "business": "Бизнес",
         "edu": "Образование",
         "unknown": "Неизвестно"
-      }
+      },
+      "exportIp": "Экспорт IP",
+      "exportIpTitle": "Экспорт IP адресов",
+      "nodes": "Ноды",
+      "selected": "выбрано",
+      "username": "Пользователь",
+      "usernamePlaceholder": "Фильтр по имени",
+      "activeOnly": "Только активные подключения",
+      "found": "Найдено",
+      "showing": "показано первых",
+      "preview": "Превью",
+      "downloadCsv": "Скачать CSV"
     },
     "nodes": {
       "title": "Ноды",

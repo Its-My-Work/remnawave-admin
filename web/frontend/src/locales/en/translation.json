@@ -1439,7 +1439,9 @@
       "asn": "ASN (provider type)",
       "profile": "Profile (behavior deviation)",
       "device": "Device (fingerprint)",
-      "hwid": "HWID (cross-account)"
+      "hwid": "HWID (cross-account)",
+      "traffic_rate": "Traffic rate (excessive consumption)",
+      "torrent": "Torrent (P2P traffic)"
     },
     "exclusions": {
       "mode": "Exclusion mode",
@@ -1811,10 +1813,14 @@
       "topUsers": "Top Users",
       "trends": "Trends",
       "sharedHwids": "Shared HWIDs",
-      "providers": "Providers",
+      "providers": "Providers / IP",
       "nodesTraffic": "Node Traffic",
       "nodes": "Nodes",
-      "retention": "Retention"
+      "retention": "Retention",
+      "geoBalance": "Geo-Balance",
+      "torrent": "P2P / Torrent",
+      "churn": "Churn",
+      "ltv": "LTV"
     },
     "nodesTraffic": {
       "title": "Traffic by Nodes",
@@ -1929,7 +1935,18 @@
         "business": "Business",
         "edu": "Education",
         "unknown": "Unknown"
-      }
+      },
+      "exportIp": "Export IP",
+      "exportIpTitle": "Export IP Addresses",
+      "nodes": "Nodes",
+      "selected": "selected",
+      "username": "Username",
+      "usernamePlaceholder": "Filter by username",
+      "activeOnly": "Active connections only",
+      "found": "Found",
+      "showing": "showing first",
+      "preview": "Preview",
+      "downloadCsv": "Download CSV"
     },
     "nodes": {
       "title": "Nodes",
