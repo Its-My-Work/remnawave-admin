@@ -107,7 +107,11 @@ class RemnawaveApiClient:
         headers = {"Content-Type": "application/json"}
         if self.settings.api_token:
             headers["Authorization"] = f"Bearer {self.settings.api_token}"
-        
+
+        # X-API-Key для reverse-proxy auth (tinyauth / Caddy)
+        if self.settings.panel_api_key:
+            headers["X-API-Key"] = self.settings.panel_api_key
+
         # Добавляем заголовки для обхода ProxyCheckMiddleware при внутренних запросах
         # Эти заголовки имитируют reverse proxy для запросов из Docker сети
         base_url_str = str(self.settings.api_base_url)
@@ -116,7 +120,7 @@ class RemnawaveApiClient:
             headers["X-Forwarded-Proto"] = "https"
             headers["X-Forwarded-For"] = "127.0.0.1"
             headers["X-Real-IP"] = "127.0.0.1"
-        
+
         return headers
 
     async def _get(self, url: str, params: dict | None = None, max_retries: int = 3) -> dict:

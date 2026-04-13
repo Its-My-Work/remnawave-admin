@@ -22,6 +22,7 @@ class SharedSettings(BaseSettings):
     # API
     api_base_url: AnyHttpUrl = Field(..., alias="API_BASE_URL")
     api_token: str | None = Field(default=None, alias="API_TOKEN")
+    panel_api_key: str | None = Field(default=None, alias="PANEL_API_KEY")
 
     # Logging
     log_level: str = Field("INFO", alias="LOG_LEVEL")
