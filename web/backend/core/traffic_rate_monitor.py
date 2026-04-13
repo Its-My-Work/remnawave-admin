@@ -56,6 +56,8 @@ class TrafficRateMonitor:
             "window_minutes": int(config_service.get("traffic_rate_window_minutes", 60) or 60),
             "check_interval_minutes": int(config_service.get("traffic_rate_check_interval_minutes", 5) or 5),
             "cooldown_minutes": int(config_service.get("traffic_rate_cooldown_minutes", 60) or 60),
+            "auto_action": config_service.get("traffic_rate_auto_action", "notify"),
+            "auto_block_gb": float(config_service.get("traffic_rate_auto_block_gb", 50.0) or 50.0),
         }
 
     async def _run_loop(self):
@@ -201,9 +203,24 @@ class TrafficRateMonitor:
         logger.info("Traffic rate violations: %d users exceeded %.1f GB/%d min",
                      len(violators), cfg["threshold_gb"], cfg["window_minutes"])
 
-        # Send notifications
+        # Send notifications + auto-block if configured
+        auto_action = cfg.get("auto_action", "notify")
+        auto_block_gb = cfg.get("auto_block_gb", 50.0)
+
         for v in violators:
             await self._send_notification(v, cfg)
+
+            # Auto-block if enabled and traffic exceeds auto_block threshold
+            if auto_action == "block_user" and v["delta_gb"] >= auto_block_gb:
+                try:
+                    from shared.api_client import api_client
+                    await api_client.disable_user(v["user_uuid"])
+                    logger.info(
+                        "Auto-blocked user %s for excessive traffic: %.1f GB (threshold: %.1f GB)",
+                        v["username"], v["delta_gb"], auto_block_gb,
+                    )
+                except Exception as e:
+                    logger.warning("Failed to auto-block user %s: %s", v["user_uuid"], e)
 
         # Cleanup old cooldown entries
         stale = [uid for uid, ts in self._notified.items() if now - ts > cooldown_seconds * 2]
@@ -315,11 +332,15 @@ class TrafficRateMonitor:
             if node_names:
                 reason += f" | Ноды: {', '.join(node_names)}"
 
+            auto_action = cfg.get("auto_action", "notify")
+            auto_block_gb = cfg.get("auto_block_gb", 50.0)
+            rec_action = "hard_block" if auto_action == "block_user" and delta_gb >= auto_block_gb else "monitor"
+
             await db_service.save_violation(
                 user_uuid=user_uuid,
                 username=username,
                 score=min(rate / 10, 10.0),  # normalize: 10 GB/h → 1.0, 100 GB/h → 10.0
-                recommended_action="monitor",
+                recommended_action=rec_action,
                 confidence=0.9,
                 reasons=[reason],
             )

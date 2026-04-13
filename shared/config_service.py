@@ -628,6 +628,27 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "default_value": "60",
         "sort_order": 54,
     },
+    {
+        "key": "traffic_rate_auto_action",
+        "value_type": "string",
+        "category": "violations",
+        "subcategory": "traffic_rate",
+        "display_name": "Авто-действие при превышении",
+        "description": "Действие при чрезмерном потреблении трафика: только уведомление или автоблокировка",
+        "default_value": "notify",
+        "options": ["notify", "block_user"],
+        "sort_order": 55,
+    },
+    {
+        "key": "traffic_rate_auto_block_gb",
+        "value_type": "float",
+        "category": "violations",
+        "subcategory": "traffic_rate",
+        "display_name": "Порог автоблокировки (GB)",
+        "description": "Автоблокировка если трафик за период превышает это значение. Работает только при авто-действии = block_user",
+        "default_value": "50.0",
+        "sort_order": 56,
+    },
 
     # === MAILSERVER ===
     {
