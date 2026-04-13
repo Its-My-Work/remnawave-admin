@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
@@ -312,34 +312,6 @@ function SourceBadge({ source }: { source: string }) {
     )
   }
   return null
-}
-
-// Debounce hook for auto-save on text/number inputs
-function useDebounce(callback: (key: string, value: string) => void, delay: number) {
-  const timeoutRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
-
-  const debouncedFn = useCallback(
-    (key: string, value: string) => {
-      if (timeoutRef.current[key]) {
-        clearTimeout(timeoutRef.current[key])
-      }
-      timeoutRef.current[key] = setTimeout(() => {
-        callback(key, value)
-        delete timeoutRef.current[key]
-      }, delay)
-    },
-    [callback, delay],
-  )
-
-  // Cancel pending on unmount
-  useEffect(() => {
-    const refs = timeoutRef.current
-    return () => {
-      Object.values(refs).forEach(clearTimeout)
-    }
-  }, [])
-
-  return debouncedFn
 }
 
 // Password generation constants
@@ -1018,20 +990,15 @@ export default function Settings() {
     [saveMutation],
   )
 
-  // Debounced save for text/number — saves 800ms after user stops typing
-  const saveDebounced = useDebounce(
-    useCallback(
-      (key: string, value: string) => {
-        saveMutation.mutate({ key, value })
-      },
-      [saveMutation],
-    ),
-    800,
-  )
-
   const handleTextChange = (key: string, value: string) => {
     setPendingValues((prev) => ({ ...prev, [key]: value }))
-    saveDebounced(key, value)
+  }
+
+  const handleTextSave = (key: string) => {
+    const value = pendingValues[key]
+    if (value !== undefined) {
+      saveMutation.mutate({ key, value })
+    }
   }
 
   const handleBoolToggle = (key: string, currentValue: boolean) => {
@@ -1129,6 +1096,7 @@ export default function Settings() {
     }
 
     if (item.value_type === 'int' || item.value_type === 'float') {
+      const hasPending = item.key in pendingValues && pendingValues[item.key] !== (item.value || '')
       return (
         <div key={item.key} className="py-3 group">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -1148,14 +1116,27 @@ export default function Settings() {
               </Button>
             )}
           </div>
-          <Input
-            type="number"
-            className="w-full"
-            value={displayValue}
-            onChange={(e) => handleTextChange(item.key, e.target.value)}
-            disabled={!isEditable || isSaving}
-            step={item.value_type === 'float' ? '0.1' : '1'}
-          />
+          <div className="flex gap-2">
+            <Input
+              type="number"
+              className="flex-1"
+              value={displayValue}
+              onChange={(e) => handleTextChange(item.key, e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && hasPending && handleTextSave(item.key)}
+              disabled={!isEditable || isSaving}
+              step={item.value_type === 'float' ? '0.1' : '1'}
+            />
+            {hasPending && (
+              <Button
+                size="sm"
+                onClick={() => handleTextSave(item.key)}
+                disabled={isSaving}
+                className="shrink-0"
+              >
+                {t('common.save', { defaultValue: 'Save' })}
+              </Button>
+            )}
+          </div>
           <div className="flex items-center gap-2 mt-1">
             {description && <p className="text-xs text-dark-200 flex-1">{description}</p>}
             {item.is_env_override && item.source !== 'env' && (
@@ -1270,6 +1251,7 @@ export default function Settings() {
     }
 
     // Default: string input
+    const hasPendingStr = item.key in pendingValues && pendingValues[item.key] !== (item.value || '')
     return (
       <div key={item.key} className="py-3 group">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -1289,14 +1271,27 @@ export default function Settings() {
             </Button>
           )}
         </div>
-        <Input
-          type={item.is_secret ? 'password' : 'text'}
-          className="w-full"
-          value={displayValue}
-          onChange={(e) => handleTextChange(item.key, e.target.value)}
-          disabled={!isEditable || isSaving}
-          placeholder={item.default_value || ''}
-        />
+        <div className="flex gap-2">
+          <Input
+            type={item.is_secret ? 'password' : 'text'}
+            className="flex-1"
+            value={displayValue}
+            onChange={(e) => handleTextChange(item.key, e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && hasPendingStr && handleTextSave(item.key)}
+            disabled={!isEditable || isSaving}
+            placeholder={item.default_value || ''}
+          />
+          {hasPendingStr && (
+            <Button
+              size="sm"
+              onClick={() => handleTextSave(item.key)}
+              disabled={isSaving}
+              className="shrink-0"
+            >
+              {t('common.save', { defaultValue: 'Save' })}
+            </Button>
+          )}
+        </div>
         <div className="flex items-center gap-2 mt-1">
           {description && <p className="text-xs text-dark-200 flex-1">{description}</p>}
           {item.is_env_override && item.source !== 'env' && (
