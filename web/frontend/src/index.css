@@ -72,14 +72,14 @@
     --chart-tooltip-text: #d1d5db;
 
     /* Glass system */
-    --glass-bg: rgba(22, 28, 38, 0.55);
-    --glass-bg-hover: rgba(22, 28, 38, 0.65);
+    --glass-bg: rgba(22, 28, 38, 0.5);
+    --glass-bg-hover: rgba(22, 28, 38, 0.6);
     --glass-bg-solid: #181e28;
-    --glass-border: rgba(255, 255, 255, 0.10);
-    --glass-border-hover: rgba(255, 255, 255, 0.16);
-    --glass-highlight: rgba(255, 255, 255, 0.05);
-    --glass-blur: 20px;
-    --glass-blur-heavy: 28px;
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-border-hover: rgba(255, 255, 255, 0.14);
+    --glass-highlight: rgba(255, 255, 255, 0.04);
+    --glass-blur: 24px;
+    --glass-blur-heavy: 32px;
 
     /* Mesh gradient colors */
     --mesh-color-1: #2d2a6e;
@@ -642,20 +642,21 @@
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
     border: 1px solid var(--glass-border);
-    border-top-color: rgba(255, 255, 255, 0.10);
+    border-top-color: rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
     box-shadow:
-      0 8px 32px rgba(0, 0, 0, 0.12),
-      inset 0 1px 0 var(--glass-highlight);
-    transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+      0 8px 32px rgba(0, 0, 0, 0.15),
+      0 1px 0 0 rgba(255, 255, 255, 0.04) inset;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease, box-shadow 0.3s ease;
   }
 
   .glass-card:hover {
-    transform: translateY(-1px);
+    transform: translateY(-2px);
     border-color: var(--glass-border-hover);
     box-shadow:
-      0 12px 40px rgba(0, 0, 0, 0.16),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 0 15px -5px rgba(var(--glow-rgb), 0.15);
+      0 16px 48px rgba(0, 0, 0, 0.2),
+      0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+      0 0 20px -5px rgba(var(--glow-rgb), 0.18);
   }
 
   /* Glow effects — uses theme accent */

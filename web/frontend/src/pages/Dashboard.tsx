@@ -394,53 +394,49 @@ const StatCard = memo(function StatCard({
   const animatedValue = useCountUp(value, loading)
 
   return (
-    <Card
+    <div
       className={cn(
-        "animate-fade-in-up group relative overflow-hidden transition-all duration-300",
-        onClick && "cursor-pointer hover:-translate-y-0.5"
+        "animate-fade-in-up group relative overflow-hidden rounded-xl transition-all duration-300",
+        onClick && "cursor-pointer hover:-translate-y-1 hover:shadow-lg"
       )}
       onClick={onClick}
       style={{
-        animationDelay: `${index * 0.05}s`,
-        '--stat-rgb': cfg.rgb,
-      } as React.CSSProperties}
+        animationDelay: `${index * 0.06}s`,
+        background: `linear-gradient(135deg, rgba(${cfg.rgb}, 0.06) 0%, rgba(22, 28, 38, 0.7) 50%, rgba(${cfg.rgb}, 0.03) 100%)`,
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+      }}
     >
-      {/* Left color bar */}
+      {/* Top accent line */}
       <div
-        className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-lg transition-all duration-300 group-hover:w-[4px]"
-        style={{
-          background: `linear-gradient(180deg, ${cfg.bar} 0%, rgba(${cfg.rgb}, 0.3) 100%)`,
-          boxShadow: `0 0 8px rgba(${cfg.rgb}, 0.15)`,
-        }}
+        className="absolute inset-x-0 top-0 h-[2px] opacity-60 group-hover:opacity-100 transition-opacity duration-300"
+        style={{ background: `linear-gradient(90deg, transparent 5%, rgba(${cfg.rgb}, 0.7) 50%, transparent 95%)` }}
       />
-      {/* Top glow line on hover */}
+      {/* Hover glow */}
       <div
-        className="absolute inset-x-0 top-0 h-px opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-        style={{ background: `linear-gradient(90deg, transparent, rgba(${cfg.rgb}, 0.5), transparent)` }}
+        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-400 pointer-events-none rounded-xl"
+        style={{ boxShadow: `inset 0 0 40px -15px rgba(${cfg.rgb}, 0.12), 0 0 25px -8px rgba(${cfg.rgb}, 0.2)` }}
       />
-      {/* Hover glow shadow */}
-      <div
-        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-lg"
-        style={{ boxShadow: `inset 0 0 30px -12px rgba(${cfg.rgb}, 0.1), 0 0 20px -8px rgba(${cfg.rgb}, 0.15)` }}
-      />
-      <CardContent className="px-4 py-3 relative">
+      <div className="px-4 py-3.5 relative">
         <div className="flex items-center justify-between">
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-muted-foreground">{title}</p>
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{title}</p>
             {loading ? (
-              <Skeleton className="h-7 w-16 mt-1" />
+              <Skeleton className="h-8 w-20 mt-1.5" />
             ) : (
-              <p className="text-lg md:text-xl font-bold text-white mt-0.5">{animatedValue}</p>
+              <p className="text-xl md:text-2xl font-bold text-white mt-1 tracking-tight">{animatedValue}</p>
             )}
             {subtitle && (
-              <p className="text-[11px] text-muted-foreground mt-0.5">{subtitle}</p>
+              <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{subtitle}</p>
             )}
           </div>
           <div
-            className="p-2 rounded-lg shrink-0 backdrop-blur-sm transition-all duration-300 group-hover:scale-110"
+            className="p-2.5 rounded-xl shrink-0 transition-all duration-300 group-hover:scale-110 group-hover:rotate-3"
             style={{
-              background: `rgba(${cfg.rgb}, 0.12)`,
-              border: `1px solid rgba(${cfg.rgb}, 0.25)`,
+              background: `rgba(${cfg.rgb}, 0.1)`,
+              border: `1px solid rgba(${cfg.rgb}, 0.2)`,
+              boxShadow: `0 0 20px -8px rgba(${cfg.rgb}, 0.25)`,
             }}
           >
             <Icon className={cn("w-5 h-5 transition-colors duration-300", cfg.text)} />
@@ -448,14 +444,14 @@ const StatCard = memo(function StatCard({
         </div>
         {onClick && (
           <span className={cn(
-            "text-[11px] text-muted-foreground flex items-center gap-1 transition-colors duration-200 mt-2",
+            "text-[11px] text-muted-foreground flex items-center gap-1 transition-all duration-200 mt-2.5 group-hover:gap-1.5",
             cfg.hoverText,
           )}>
-            {t('dashboard.details')} <ExternalLink className="w-3 h-3" />
+            {t('dashboard.details')} <ArrowUpRight className="w-3 h-3 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </span>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 })
 
@@ -1925,18 +1921,19 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* ── Page header ─────────────────────────────────────────── */}
-      <div className="page-header">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="page-header-title">{t('dashboard.title')}</h1>
-          <p className="text-muted-foreground mt-1 text-sm md:text-base">{t('dashboard.subtitle')}</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">{t('dashboard.title')}</h1>
+          <p className="text-muted-foreground mt-1 text-sm">{t('dashboard.subtitle')}</p>
         </div>
         <Button
-          variant="secondary"
+          variant="outline"
+          size="sm"
           onClick={handleRefreshAll}
           disabled={isLoading}
-          className="self-start sm:self-auto"
+          className="gap-2 backdrop-blur-sm"
         >
-          <RefreshCw className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")} />
+          <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
           <span className="hidden sm:inline">{t('dashboard.refresh')}</span>
         </Button>
       </div>
@@ -1958,7 +1955,7 @@ export default function Dashboard() {
       )}
 
       {/* ── Stats grid (5 compact cards) ────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {canViewUsers && (
           <StatCard
             title={t('dashboard.totalUsers')}
