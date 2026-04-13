@@ -402,15 +402,15 @@ const StatCard = memo(function StatCard({
       onClick={onClick}
       style={{
         animationDelay: `${index * 0.06}s`,
-        background: `linear-gradient(135deg, rgba(${cfg.rgb}, 0.06) 0%, rgba(22, 28, 38, 0.7) 50%, rgba(${cfg.rgb}, 0.03) 100%)`,
+        background: `linear-gradient(135deg, rgba(${cfg.rgb}, 0.06) 0%, var(--glass-bg) 50%, rgba(${cfg.rgb}, 0.03) 100%)`,
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-        border: '1px solid rgba(255, 255, 255, 0.08)',
+        border: '1px solid var(--glass-border)',
       }}
     >
       {/* Top accent line */}
       <div
-        className="absolute inset-x-0 top-0 h-[2px] opacity-60 group-hover:opacity-100 transition-opacity duration-300"
+        className="absolute inset-x-0 top-0 h-[2px] opacity-40 group-hover:opacity-80 transition-opacity duration-300"
         style={{ background: `linear-gradient(90deg, transparent 5%, rgba(${cfg.rgb}, 0.7) 50%, transparent 95%)` }}
       />
       {/* Hover glow */}
@@ -425,7 +425,7 @@ const StatCard = memo(function StatCard({
             {loading ? (
               <Skeleton className="h-8 w-20 mt-1.5" />
             ) : (
-              <p className="text-xl md:text-2xl font-bold text-white mt-1 tracking-tight">{animatedValue}</p>
+              <p className="text-xl md:text-2xl font-bold text-foreground mt-1 tracking-tight">{animatedValue}</p>
             )}
             {subtitle && (
               <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{subtitle}</p>
@@ -519,13 +519,13 @@ function TrafficChartTooltip({ active, payload, label }: { active?: boolean; pay
   // Sort by value descending for readability; keep original color from stroke
   const sorted = [...payload].sort((a, b) => (b.value || 0) - (a.value || 0))
   return (
-    <div className="px-3 py-2.5 rounded-xl border border-white/10 shadow-xl" style={{ ...chart.tooltipStyle, backdropFilter: 'blur(16px)' }}>
+    <div style={chart.tooltipStyle} className="px-3 py-2.5 rounded-xl shadow-xl">
       <p className={cn("text-[10px] uppercase tracking-wider mb-1.5", chart.tooltipMutedClass)}>{label}</p>
       {sorted.map((entry, i) => (
         <p key={i} className="text-xs flex items-center gap-2 py-0.5">
-          <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color, boxShadow: `0 0 6px ${entry.color}40` }} />
-          <span className="text-white/70">{entry.name}:</span>
-          <span className="text-white font-medium ml-auto">{formatBytesLocal(entry.value)}</span>
+          <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
+          <span className={chart.tooltipMutedClass}>{entry.name}:</span>
+          <span className="font-medium ml-auto" style={{ color: chart.tooltipStyle.color }}>{formatBytesLocal(entry.value)}</span>
         </p>
       ))}
     </div>
@@ -594,7 +594,7 @@ function GrowthTrendsCard({
                 <RechartsTooltip content={(props: any) => {
                   if (!props.active || !props.payload?.length) return null
                   return (
-                    <div className="px-3 py-2.5 rounded-xl border border-white/10 shadow-xl" style={{ ...chart.tooltipStyle, backdropFilter: 'blur(16px)' }}>
+                    <div style={chart.tooltipStyle} className="px-3 py-2.5 rounded-xl shadow-xl">
                       <p className={cn("text-[10px] uppercase tracking-wider mb-1", chart.tooltipMutedClass)}>{props.label}</p>
                       {props.payload.map((entry: any, i: number) => (
                         <p key={i} className="text-xs font-medium" style={{ color: entry.color }}>
@@ -1924,7 +1924,7 @@ export default function Dashboard() {
       {/* ── Page header ─────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">{t('dashboard.title')}</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground tracking-tight">{t('dashboard.title')}</h1>
           <p className="text-muted-foreground mt-1 text-sm">{t('dashboard.subtitle')}</p>
         </div>
         <Button
