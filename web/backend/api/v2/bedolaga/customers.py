@@ -64,11 +64,60 @@ async def list_users(
     admin: AdminUser = Depends(require_permission("bedolaga_customers", "view")),
 ):
     """Список клиентов Bedolaga Bot."""
-    return await proxy_request(lambda: bedolaga_client.list_users(
-        limit=limit, offset=offset, status=status, search=search,
-        promo_group_id=promo_group_id, subscription_status=subscription_status,
-        sort=sort, order=order,
-    ))
+    # Bedolaga API поддерживает только: limit, offset, status, promo_group_id, search
+    # sort/order и subscription_status не поддерживаются — обрабатываем локально
+    need_local = bool(subscription_status) or (sort and sort != "created_at") or (sort == "created_at" and order == "asc")
+
+    if not need_local:
+        return await proxy_request(lambda: bedolaga_client.list_users(
+            limit=limit, offset=offset, status=status, search=search,
+            promo_group_id=promo_group_id, sort=sort, order=order,
+        ))
+
+    # Bedolaga API не поддерживает subscription_status и некоторые sort поля —
+    # забираем всех юзеров и обрабатываем на бэкенде
+    all_items: list = []
+    batch_size = 200
+    batch_offset = 0
+    while True:
+        resp = await proxy_request(lambda o=batch_offset: bedolaga_client.list_users(
+            limit=batch_size, offset=o, status=status, search=search,
+            promo_group_id=promo_group_id,
+        ))
+        items = resp.get("items", []) if isinstance(resp, dict) else []
+        all_items.extend(items)
+        if len(items) < batch_size:
+            break
+        batch_offset += batch_size
+
+    # Фильтрация по subscription status
+    if subscription_status:
+        def match_sub(user: dict) -> bool:
+            sub = user.get("subscription")
+            if subscription_status == "trial":
+                return isinstance(sub, dict) and sub.get("is_trial") is True
+            if subscription_status == "active":
+                return isinstance(sub, dict) and sub.get("status") == "active" and not sub.get("is_trial")
+            if subscription_status == "expired":
+                return isinstance(sub, dict) and sub.get("status") == "expired"
+            if subscription_status == "none":
+                return not sub or not isinstance(sub, dict) or not sub.get("status")
+            return True
+        all_items = [u for u in all_items if match_sub(u)]
+
+    # Сортировка
+    if sort:
+        reverse = order == "desc"
+        if sort == "last_activity":
+            all_items.sort(key=lambda u: u.get("last_activity") or "", reverse=reverse)
+        elif sort == "balance":
+            all_items.sort(key=lambda u: u.get("balance_kopeks") or 0, reverse=reverse)
+        elif sort == "username":
+            all_items.sort(key=lambda u: (u.get("username") or u.get("first_name") or "").lower(), reverse=reverse)
+        elif sort == "created_at":
+            all_items.sort(key=lambda u: u.get("created_at") or "", reverse=reverse)
+
+    return {"items": all_items[offset:offset + limit], "total": len(all_items)}
 
 
 # ── Transactions (static path — before /{user_id}) ──
