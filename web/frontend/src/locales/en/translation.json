@@ -2117,8 +2117,10 @@
       "node_uptime_percentDesc": "Node availability percentage over the last 24 hours",
       "user_traffic_percent": "Traffic usage (%)",
       "user_traffic_percentDesc": "Percentage of traffic used from the limit",
-      "user_node_traffic_gb": "Node traffic (GB)",
-      "user_node_traffic_gbDesc": "User traffic on a specific node in gigabytes today"
+      "user_node_traffic_gb": "Node traffic — total (GB)",
+      "user_node_traffic_gbDesc": "Cumulative user traffic on a specific node",
+      "user_node_traffic_today_gb": "Node traffic — today (GB)",
+      "user_node_traffic_today_gbDesc": "User traffic on a specific node for the current day"
     },
     "operators": {
       "eq": "equal (=)",

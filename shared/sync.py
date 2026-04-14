@@ -230,6 +230,14 @@ class SyncService:
         except Exception as e:
             logger.debug("Traffic snapshot cleanup failed: %s", e)
 
+        # Cleanup user-node traffic history (keep 48 hours)
+        try:
+            deleted = await db_service.cleanup_old_user_node_traffic_history(keep_hours=48)
+            if deleted:
+                logger.debug("Cleaned up %d old user-node traffic history entries", deleted)
+        except Exception as e:
+            logger.debug("User-node traffic history cleanup failed: %s", e)
+
         logger.debug("Full sync completed: %s", results)
         return results
     
@@ -901,6 +909,8 @@ class SyncService:
             total_synced = 0
             # Accumulate deltas: {user_uuid: total_delta_bytes}
             raw_deltas: dict[str, int] = {}
+            # Per-user-per-node deltas for daily traffic history
+            node_deltas: list[tuple[str, str, int]] = []
             # Accumulate per-node totals for traffic snapshots
             node_totals: dict[str, int] = {}
 
@@ -942,6 +952,7 @@ class SyncService:
 
                             if delta > 0:
                                 raw_deltas[user_uuid] = raw_deltas.get(user_uuid, 0) + delta
+                                node_deltas.append((user_uuid, node_uuid, delta))
 
                             await db_service.upsert_user_node_traffic(
                                 user_uuid, node_uuid, new_bytes
@@ -959,6 +970,11 @@ class SyncService:
             if raw_deltas:
                 await db_service.increment_raw_traffic(raw_deltas)
                 logger.debug("Accumulated raw traffic deltas for %d users", len(raw_deltas))
+
+            # Save per-user-per-node deltas for daily traffic metric
+            if node_deltas:
+                await db_service.insert_user_node_traffic_deltas(node_deltas)
+                logger.debug("Saved %d user-node traffic deltas", len(node_deltas))
 
             # Save per-node traffic snapshots for timeseries chart
             if node_totals:

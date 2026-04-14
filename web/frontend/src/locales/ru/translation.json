@@ -2117,8 +2117,10 @@
       "node_uptime_percentDesc": "Процент времени доступности узла за последние 24 часа",
       "user_traffic_percent": "Использование трафика (%)",
       "user_traffic_percentDesc": "Процент использованного трафика от лимита по тарифу",
-      "user_node_traffic_gb": "Трафик на ноде (ГБ)",
-      "user_node_traffic_gbDesc": "Трафик пользователя на конкретной ноде в гигабайтах за сегодня"
+      "user_node_traffic_gb": "Трафик на ноде — всего (ГБ)",
+      "user_node_traffic_gbDesc": "Кумулятивный трафик пользователя на конкретной ноде",
+      "user_node_traffic_today_gb": "Трафик на ноде — за сегодня (ГБ)",
+      "user_node_traffic_today_gbDesc": "Трафик пользователя на конкретной ноде за текущие сутки"
     },
     "operators": {
       "eq": "равно (=)",
