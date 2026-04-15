@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, memo, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUrlParam } from '@/lib/useUrlParam'
 import { useDeferredAction } from '@/lib/useDeferredAction'
+import { toastMutationError } from '@/lib/mutationToast'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
@@ -891,8 +892,8 @@ export default function Users() {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       toast.success(t('users.toasts.userEnabled'))
     },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(err.response?.data?.detail || err.message || t('users.toasts.enableError'))
+    onError: (err, uuid) => {
+      toastMutationError(err, t('users.toasts.enableError'), () => enableUser.mutate(uuid), t('common.retry', { defaultValue: 'Повторить' }))
     },
   })
 
@@ -902,8 +903,8 @@ export default function Users() {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       toast.success(t('users.toasts.userDisabled'))
     },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(err.response?.data?.detail || err.message || t('users.toasts.disableError'))
+    onError: (err, uuid) => {
+      toastMutationError(err, t('users.toasts.disableError'), () => disableUser.mutate(uuid), t('common.retry', { defaultValue: 'Повторить' }))
     },
   })
 
@@ -979,6 +980,7 @@ export default function Users() {
   const clearSelection = useCallback(() => setSelectedUuids(new Set()), [])
 
   // Bulk mutations
+  const retryLabel = t('common.retry', { defaultValue: 'Повторить' })
   const bulkEnable = useMutation({
     mutationFn: (uuids: string[]) => client.post('/users/bulk/enable', { uuids }),
     onSuccess: (res) => {
@@ -987,7 +989,7 @@ export default function Users() {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       clearSelection()
     },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('users.toasts.error')) },
+    onError: (err, uuids) => toastMutationError(err, t('users.toasts.error'), () => bulkEnable.mutate(uuids), retryLabel),
   })
   const bulkDisable = useMutation({
     mutationFn: (uuids: string[]) => client.post('/users/bulk/disable', { uuids }),
@@ -997,7 +999,7 @@ export default function Users() {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       clearSelection()
     },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('users.toasts.error')) },
+    onError: (err, uuids) => toastMutationError(err, t('users.toasts.error'), () => bulkDisable.mutate(uuids), retryLabel),
   })
   const bulkDelete = useMutation({
     mutationFn: (uuids: string[]) => client.post('/users/bulk/delete', { uuids }),
@@ -1007,7 +1009,7 @@ export default function Users() {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       clearSelection()
     },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('users.toasts.error')) },
+    onError: (err, uuids) => toastMutationError(err, t('users.toasts.error'), () => bulkDelete.mutate(uuids), retryLabel),
   })
 
   const hasAnyFilter = activeFilterCount > 0 || debouncedSearch

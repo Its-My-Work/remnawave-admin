@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useDeferredAction } from '@/lib/useDeferredAction'
+import { toastMutationError } from '@/lib/mutationToast'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
@@ -1088,15 +1089,14 @@ export default function Nodes() {
     },
   })
 
+  const retryLabel = t('common.retry', { defaultValue: 'Повторить' })
   const enableNode = useMutation({
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/enable`),
     onSuccess: (_data, uuid) => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
       toast.success(t('nodes.toast.enabled'), { description: getNodeName(uuid) })
     },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(t('nodes.toast.error'), { description: err.response?.data?.detail || err.message })
-    },
+    onError: (err, uuid) => toastMutationError(err, t('nodes.toast.error'), () => enableNode.mutate(uuid), retryLabel),
   })
 
   const disableNode = useMutation({
@@ -1105,9 +1105,7 @@ export default function Nodes() {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
       toast.success(t('nodes.toast.disabled'), { description: getNodeName(uuid) })
     },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(t('nodes.toast.error'), { description: err.response?.data?.detail || err.message })
-    },
+    onError: (err, uuid) => toastMutationError(err, t('nodes.toast.error'), () => disableNode.mutate(uuid), retryLabel),
   })
 
   const deleteNode = useMutation({

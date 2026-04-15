@@ -103,9 +103,14 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
         >
           <Search className="w-4 h-4 flex-shrink-0" />
           <span className="flex-1 text-left">{t('header.searchPlaceholder')}</span>
-          <kbd className="hidden lg:inline-flex h-5 select-none items-center gap-1 rounded-md border border-[var(--glass-border)] bg-white/5 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
-            <span className="text-xs">&#x2318;</span>K
-          </kbd>
+          <span className="hidden lg:inline-flex items-center gap-1">
+            <kbd className="h-5 select-none inline-flex items-center gap-1 rounded-md border border-[var(--glass-border)] bg-white/5 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+              <span className="text-xs">&#x2318;</span>K
+            </kbd>
+            <kbd className="h-5 select-none inline-flex items-center rounded-md border border-[var(--glass-border)] bg-white/5 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+              /
+            </kbd>
+          </span>
         </button>
 
         {/* Mobile search icon */}

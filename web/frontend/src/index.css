@@ -1072,3 +1072,15 @@
 .leaflet-control-zoom a {
   text-decoration: none !important;
 }
+
+/* Tabular numbers — align digits in data columns so they don't shift
+   on scroll/update. Applied to tables, monospace contexts, and anything
+   marked .tabular-nums. */
+table,
+code,
+pre,
+kbd,
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
