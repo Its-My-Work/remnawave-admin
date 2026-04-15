@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, memo, useCallback, useMemo } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { useUrlParam } from '@/lib/useUrlParam'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
@@ -771,20 +772,21 @@ export default function Users() {
   const [deleteConfirmUuid, setDeleteConfirmUuid] = useState<string | null>(null)
   const [disableConfirmUuid, setDisableConfirmUuid] = useState<string | null>(null)
 
-  // State
-  const [page, setPage] = useState(1)
-  const [perPage, setPerPage] = useState(20)
-  const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [status, setStatus] = useState('')
-  const [trafficType, setTrafficType] = useState('')
-  const [searchParams] = useSearchParams()
-  const [expireFilter, setExpireFilter] = useState(searchParams.get('expire_filter') || '')
-  const [onlineFilter, setOnlineFilter] = useState('')
-  const [trafficUsage, setTrafficUsage] = useState('')
-  const [sortBy, setSortBy] = useState('created_at')
-  const [sortOrder, setSortOrder] = useState('desc')
-  const [showFilters, setShowFilters] = useState(!!searchParams.get('expire_filter'))
+  // State (persisted in URL — shareable + survives refresh)
+  const [page, setPage] = useUrlParam('page', 1)
+  const [perPage, setPerPage] = useUrlParam('per_page', 20)
+  const [search, setSearch] = useUrlParam('q', '')
+  const [debouncedSearch, setDebouncedSearch] = useState(search)
+  const [status, setStatus] = useUrlParam('status', '')
+  const [trafficType, setTrafficType] = useUrlParam('traffic_type', '')
+  const [expireFilter, setExpireFilter] = useUrlParam('expire_filter', '')
+  const [onlineFilter, setOnlineFilter] = useUrlParam('online_filter', '')
+  const [trafficUsage, setTrafficUsage] = useUrlParam('traffic_usage', '')
+  const [sortBy, setSortBy] = useUrlParam('sort_by', 'created_at')
+  const [sortOrder, setSortOrder] = useUrlParam('sort_order', 'desc')
+  const hasAnyFilterInUrl =
+    !!status || !!trafficType || !!expireFilter || !!onlineFilter || !!trafficUsage
+  const [showFilters, setShowFilters] = useState(hasAnyFilterInUrl)
 
   const activeFilterCount = useMemo(
     () => [status, trafficType, expireFilter, onlineFilter, trafficUsage].filter(Boolean).length,
