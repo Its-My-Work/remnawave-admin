@@ -57,25 +57,22 @@ export function useUrlParam<T extends ParamValue>(
 
   const setValue = useCallback(
     (action: SetValueAction<T>) => {
-      setSearchParams(
-        (prev) => {
-          const params = new URLSearchParams(prev)
-          const current = parse(params.get(key))
-          const next =
-            typeof action === 'function'
-              ? (action as (p: T) => T)(current)
-              : action
-          const isEmpty = next === '' || next === null || next === undefined
-          const isDefault = next === defaultValue
-          if (isEmpty || isDefault) {
-            params.delete(key)
-          } else {
-            params.set(key, options?.serialize ? options.serialize(next) : String(next))
-          }
-          return params
-        },
-        { replace: true },
-      )
+      // Read live URL instead of callback prev — react-router doesn't batch
+      // sequential setSearchParams calls within the same tick.
+      const params = new URLSearchParams(window.location.search)
+      const current = parse(params.get(key))
+      const next =
+        typeof action === 'function'
+          ? (action as (p: T) => T)(current)
+          : action
+      const isEmpty = next === '' || next === null || next === undefined
+      const isDefault = next === defaultValue
+      if (isEmpty || isDefault) {
+        params.delete(key)
+      } else {
+        params.set(key, options?.serialize ? options.serialize(next) : String(next))
+      }
+      setSearchParams(params, { replace: true })
     },
     [key, defaultValue, setSearchParams, options, parse],
   )
