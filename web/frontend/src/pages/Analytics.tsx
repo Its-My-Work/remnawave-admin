@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useTabParam } from '@/lib/useTabParam'
+import { useUrlParam } from '@/lib/useUrlParam'
 import { usePermissionStore } from '@/store/permissionStore'
 import {
   Globe,
@@ -199,9 +200,9 @@ function DateRangePicker({
 function GeoMapCard() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const [geoPeriod, setGeoPeriod] = useState('7d')
-  const [geoDateFrom, setGeoDateFrom] = useState('')
-  const [geoDateTo, setGeoDateTo] = useState('')
+  const [geoPeriod, setGeoPeriod] = useUrlParam('geo_period', '7d')
+  const [geoDateFrom, setGeoDateFrom] = useUrlParam('geo_from', '')
+  const [geoDateTo, setGeoDateTo] = useUrlParam('geo_to', '')
   const chart = useChartTheme()
 
   const hasCustomDates = Boolean(geoDateFrom)
@@ -789,11 +790,13 @@ const UsageBar = memo(function UsageBar({ percent }: { percent: number }) {
 function TrendsCard() {
   const { t } = useTranslation()
   const { formatBytes } = useFormatters()
-  const [metric, setMetric] = useState('users')
-  const [period, setPeriod] = useState('30d')
-  const [compare, setCompare] = useState(false)
-  const [trendDateFrom, setTrendDateFrom] = useState('')
-  const [trendDateTo, setTrendDateTo] = useState('')
+  const [metric, setMetric] = useUrlParam('trend_metric', 'users')
+  const [period, setPeriod] = useUrlParam('trend_period', '30d')
+  const [compareRaw, setCompareRaw] = useUrlParam('trend_compare', '')
+  const compare = compareRaw === '1'
+  const setCompare = (v: boolean) => setCompareRaw(v ? '1' : '')
+  const [trendDateFrom, setTrendDateFrom] = useUrlParam('trend_from', '')
+  const [trendDateTo, setTrendDateTo] = useUrlParam('trend_to', '')
   const chart = useChartTheme()
 
   const hasCustomDates = Boolean(trendDateFrom)
@@ -891,7 +894,7 @@ function TrendsCard() {
                 variant={compare ? 'default' : 'outline'}
                 size="sm"
                 className="h-7 text-xs gap-1"
-                onClick={() => setCompare((v) => !v)}
+                onClick={() => setCompare(!compare)}
               >
                 <GitCompare className="w-3 h-3" />
                 {t('analytics.trends.compare', { defaultValue: 'Compare' })}
@@ -1703,12 +1706,16 @@ function NodesTrafficCard() {
   const { t } = useTranslation()
   const { formatBytes } = useFormatters()
 
-  // Default to last 7 days
+  // Default to last 7 days (computed fresh each render; URL stores only explicit overrides)
   const today = new Date()
   const weekAgo = new Date(today)
   weekAgo.setDate(weekAgo.getDate() - 7)
-  const [dateFrom, setDateFrom] = useState(weekAgo.toISOString().slice(0, 10))
-  const [dateTo, setDateTo] = useState(today.toISOString().slice(0, 10))
+  const defaultFrom = weekAgo.toISOString().slice(0, 10)
+  const defaultTo = today.toISOString().slice(0, 10)
+  const [dateFromRaw, setDateFrom] = useUrlParam('nt_from', '')
+  const [dateToRaw, setDateTo] = useUrlParam('nt_to', '')
+  const dateFrom = dateFromRaw || defaultFrom
+  const dateTo = dateToRaw || defaultTo
 
   const apiDateFrom = new Date(dateFrom).toISOString()
   const apiDateTo = new Date(dateTo + 'T23:59:59').toISOString()
