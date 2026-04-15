@@ -219,7 +219,7 @@ class TestDispatchWebhookEvent:
     @patch("shared.database.db_service")
     async def test_dispatch_sends_with_hmac(self, mock_db_svc, mock_post):
         """Verify HMAC signature is computed correctly."""
-        webhook_row = {"id": 1, "url": "https://example.com/hook", "secret": "test-secret"}
+        webhook_row = {"id": 1, "url": "https://example.com/hook", "secret": "test-secret", "signature_version": "v1"}
         mock_svc, mock_conn = _mock_db_service(fetch_return=[webhook_row])
         mock_db_svc.is_connected = mock_svc.is_connected
         mock_db_svc.acquire = mock_svc.acquire

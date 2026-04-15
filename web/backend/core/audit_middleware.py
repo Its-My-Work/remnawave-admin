@@ -30,6 +30,8 @@ _EXTRACT_FIELDS: dict[str, set[str]] = {
     "hosts": {"remark", "address", "port", "sni", "host", "is_disabled", "alpn", "fingerprint"},
     "settings": {"value"},
     "violations": {},
+    "api_keys": {"name", "scopes", "expires_at", "description", "is_active"},
+    "webhooks": {"name", "url", "events", "is_active", "signature_version", "description"},
 }
 
 # Sensitive fields that must never be logged
@@ -88,6 +90,18 @@ _ROUTE_MAP: list[Tuple[str, str, str, str]] = [
     ("POST", r"/api/v2/roles$", "roles", "create"),
     ("PUT", r"/api/v2/roles/(\d+)$", "roles", "update"),
     ("DELETE", r"/api/v2/roles/(\d+)$", "roles", "delete"),
+
+    # API keys
+    ("POST", r"/api/v2/api-keys/?$", "api_keys", "create"),
+    ("POST", r"/api/v2/api-keys/(\d+)/rotate$", "api_keys", "rotate"),
+    ("PATCH", r"/api/v2/api-keys/(\d+)$", "api_keys", "update"),
+    ("DELETE", r"/api/v2/api-keys/(\d+)$", "api_keys", "delete"),
+
+    # Webhooks
+    ("POST", r"/api/v2/webhooks/?$", "webhooks", "create"),
+    ("POST", r"/api/v2/webhooks/(\d+)/test$", "webhooks", "test"),
+    ("PATCH", r"/api/v2/webhooks/(\d+)$", "webhooks", "update"),
+    ("DELETE", r"/api/v2/webhooks/(\d+)$", "webhooks", "delete"),
 
     # Auth
     ("POST", r"/api/v2/auth/password$", "auth", "login"),

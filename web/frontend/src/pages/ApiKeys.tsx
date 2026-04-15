@@ -15,6 +15,7 @@ import {
   Send,
   History,
   Loader2,
+  RotateCw,
 } from 'lucide-react'
 import {
   apiKeysApi,
@@ -80,13 +81,16 @@ function ApiKeysTab() {
   const [newKeyName, setNewKeyName] = useState('')
   const [newKeyScopes, setNewKeyScopes] = useState<string[]>([])
   const [newKeyTtl, setNewKeyTtl] = useState<string>('never')
+  const [newKeyDesc, setNewKeyDesc] = useState('')
   const [createdKey, setCreatedKey] = useState<ApiKeyCreated | null>(null)
   const [keySaved, setKeySaved] = useState(false)
   const [copied, setCopied] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
+  const [confirmRotate, setConfirmRotate] = useState<number | null>(null)
   const [editKey, setEditKey] = useState<ApiKey | null>(null)
   const [editName, setEditName] = useState('')
   const [editScopes, setEditScopes] = useState<string[]>([])
+  const [editDesc, setEditDesc] = useState('')
 
   const retryLabel = t('common.retry', { defaultValue: 'Повторить' })
 
@@ -108,11 +112,24 @@ function ApiKeysTab() {
       setNewKeyName('')
       setNewKeyScopes([])
       setNewKeyTtl('never')
+      setNewKeyDesc('')
       setKeySaved(false)
       queryClient.invalidateQueries({ queryKey: ['api-keys'] })
     },
     onError: (err, vars) =>
       toastMutationError(err, t('apiKeys.createFailed'), () => createKey.mutate(vars), retryLabel),
+  })
+
+  const rotateKey = useMutation({
+    mutationFn: apiKeysApi.rotate,
+    onSuccess: (data) => {
+      setCreatedKey(data)
+      setKeySaved(false)
+      setConfirmRotate(null)
+      queryClient.invalidateQueries({ queryKey: ['api-keys'] })
+    },
+    onError: (err, id) =>
+      toastMutationError(err, t('apiKeys.rotateFailed', { defaultValue: 'Rotate failed' }), () => rotateKey.mutate(id), retryLabel),
   })
 
   const toggleKey = useMutation({
@@ -124,8 +141,8 @@ function ApiKeysTab() {
   })
 
   const updateKey = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: { name?: string; scopes?: string[] } }) =>
-      apiKeysApi.update(id, payload),
+    mutationFn: ({ id, payload }: { id: number; payload: { name?: string; scopes?: string[]; description?: string | null } }) =>
+      apiKeysApi.update(id, payload as Parameters<typeof apiKeysApi.update>[1]),
     onSuccess: () => {
       toast.success(t('apiKeys.updated', { defaultValue: 'Ключ обновлён' }))
       setEditKey(null)
@@ -160,6 +177,7 @@ function ApiKeysTab() {
     setEditKey(key)
     setEditName(key.name)
     setEditScopes(key.scopes)
+    setEditDesc(key.description || '')
   }
 
   const closeCreatedDialog = () => {
@@ -250,6 +268,16 @@ function ApiKeysTab() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
+                          aria-label={t('apiKeys.rotate', { defaultValue: 'Rotate key' })}
+                          title={t('apiKeys.rotate', { defaultValue: 'Rotate key' })}
+                          onClick={() => setConfirmRotate(key.id)}
+                        >
+                          <RotateCw className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
                           aria-label={t('common.edit')}
                           onClick={() => openEdit(key)}
                         >
@@ -326,6 +354,14 @@ function ApiKeysTab() {
                 ))}
               </div>
             </div>
+            <div>
+              <Label>{t('apiKeys.description', { defaultValue: 'Description' })}</Label>
+              <Input
+                value={newKeyDesc}
+                onChange={(e) => setNewKeyDesc(e.target.value)}
+                placeholder={t('apiKeys.descriptionPlaceholder', { defaultValue: 'Optional — what is this key used for?' })}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>
@@ -337,6 +373,7 @@ function ApiKeysTab() {
                 name: newKeyName,
                 scopes: newKeyScopes,
                 expires_at: ttlToIsoString(newKeyTtl),
+                description: newKeyDesc || undefined,
               })}
             >
               {createKey.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -407,6 +444,10 @@ function ApiKeysTab() {
               <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
             </div>
             <div>
+              <Label>{t('apiKeys.description', { defaultValue: 'Description' })}</Label>
+              <Input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} />
+            </div>
+            <div>
               <Label>{t('apiKeys.scopes')}</Label>
               <div className="flex flex-wrap gap-2 mt-2">
                 {scopes.map((scope) => (
@@ -435,7 +476,7 @@ function ApiKeysTab() {
               disabled={!editName.trim() || updateKey.isPending}
               onClick={() => editKey && updateKey.mutate({
                 id: editKey.id,
-                payload: { name: editName, scopes: editScopes },
+                payload: { name: editName, scopes: editScopes, description: editDesc || null as unknown as string },
               })}
             >
               {updateKey.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -456,6 +497,18 @@ function ApiKeysTab() {
           if (confirmDelete) deleteKey.mutate(confirmDelete)
         }}
       />
+
+      <ConfirmDialog
+        open={!!confirmRotate}
+        onOpenChange={(open) => !open && setConfirmRotate(null)}
+        title={t('apiKeys.confirmRotate', { defaultValue: 'Rotate this API key?' })}
+        description={t('apiKeys.confirmRotateDesc', { defaultValue: 'A new secret will be generated. The current key will stop working immediately. You will see the new key once — copy it.' })}
+        confirmLabel={t('apiKeys.rotate', { defaultValue: 'Rotate' })}
+        variant="destructive"
+        onConfirm={() => {
+          if (confirmRotate) rotateKey.mutate(confirmRotate)
+        }}
+      />
     </div>
   )
 }
@@ -469,10 +522,10 @@ function WebhooksTab() {
   const queryClient = useQueryClient()
 
   const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ name: '', url: '', secret: '', events: [] as string[] })
+  const [form, setForm] = useState({ name: '', url: '', secret: '', events: [] as string[], signature_version: 'v2' as 'v1' | 'v2', description: '' })
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
   const [editWebhook, setEditWebhook] = useState<WebhookSubscription | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', url: '', secret: '', events: [] as string[], changeSecret: false })
+  const [editForm, setEditForm] = useState({ name: '', url: '', secret: '', events: [] as string[], changeSecret: false, signature_version: 'v2' as 'v1' | 'v2', description: '' })
   const [testWebhookId, setTestWebhookId] = useState<number | null>(null)
   const [testResult, setTestResult] = useState<WebhookTestResult | null>(null)
   const [historyWebhookId, setHistoryWebhookId] = useState<number | null>(null)
@@ -497,7 +550,7 @@ function WebhooksTab() {
     onSuccess: () => {
       toast.success(t('apiKeys.webhookCreated'))
       setShowCreate(false)
-      setForm({ name: '', url: '', secret: '', events: [] })
+      setForm({ name: '', url: '', secret: '', events: [], signature_version: 'v2', description: '' })
       queryClient.invalidateQueries({ queryKey: ['webhooks'] })
     },
     onError: (err, vars) =>
@@ -513,8 +566,8 @@ function WebhooksTab() {
   })
 
   const updateWebhook = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: { name?: string; url?: string; secret?: string; events?: string[] } }) =>
-      webhooksApi.update(id, payload),
+    mutationFn: ({ id, payload }: { id: number; payload: { name?: string; url?: string; secret?: string; events?: string[]; signature_version?: 'v1' | 'v2'; description?: string | null } }) =>
+      webhooksApi.update(id, payload as Parameters<typeof webhooksApi.update>[1]),
     onSuccess: () => {
       toast.success(t('apiKeys.webhookUpdated', { defaultValue: 'Webhook обновлён' }))
       setEditWebhook(null)
@@ -556,6 +609,8 @@ function WebhooksTab() {
       secret: '',
       events: wh.events,
       changeSecret: false,
+      signature_version: wh.signature_version || 'v2',
+      description: wh.description || '',
     })
   }
 
@@ -605,7 +660,12 @@ function WebhooksTab() {
                       <p className="text-sm font-medium text-white truncate">{wh.name}</p>
                       {wh.has_secret && (
                         <Badge variant="outline" className="text-xs text-emerald-400 border-emerald-500/20">
-                          {t('apiKeys.signed')}
+                          {t('apiKeys.signed')} · {wh.signature_version || 'v1'}
+                        </Badge>
+                      )}
+                      {wh.auto_disabled_at && (
+                        <Badge variant="outline" className="text-xs text-red-400 border-red-500/30" title={wh.disabled_reason || ''}>
+                          {t('apiKeys.autoDisabled', { defaultValue: 'Auto-disabled' })}
                         </Badge>
                       )}
                       {wh.failure_count > 0 && (
@@ -722,6 +782,30 @@ function WebhooksTab() {
               </p>
             </div>
             <div>
+              <Label>{t('apiKeys.signatureVersion', { defaultValue: 'Signature version' })}</Label>
+              <Select
+                value={form.signature_version}
+                onValueChange={(v) => setForm((p) => ({ ...p, signature_version: v as 'v1' | 'v2' }))}
+              >
+                <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="v2">v2 — timestamped (recommended)</SelectItem>
+                  <SelectItem value="v1">v1 — legacy</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-dark-400 mt-1">
+                {t('apiKeys.signatureHint', { defaultValue: 'v2 prepends timestamp to HMAC input and sends X-Webhook-Timestamp for replay protection.' })}
+              </p>
+            </div>
+            <div>
+              <Label>{t('apiKeys.description', { defaultValue: 'Description' })}</Label>
+              <Input
+                value={form.description}
+                onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+                placeholder={t('apiKeys.webhookDescPlaceholder', { defaultValue: 'Optional — what does this webhook do?' })}
+              />
+            </div>
+            <div>
               <Label>{t('apiKeys.events')}</Label>
               <div className="flex flex-wrap gap-2 mt-2">
                 {events.map((event) => (
@@ -803,6 +887,26 @@ function WebhooksTab() {
               )}
             </div>
             <div>
+              <Label>{t('apiKeys.signatureVersion', { defaultValue: 'Signature version' })}</Label>
+              <Select
+                value={editForm.signature_version}
+                onValueChange={(v) => setEditForm((p) => ({ ...p, signature_version: v as 'v1' | 'v2' }))}
+              >
+                <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="v2">v2 — timestamped (recommended)</SelectItem>
+                  <SelectItem value="v1">v1 — legacy</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>{t('apiKeys.description', { defaultValue: 'Description' })}</Label>
+              <Input
+                value={editForm.description}
+                onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))}
+              />
+            </div>
+            <div>
               <Label>{t('apiKeys.events')}</Label>
               <div className="flex flex-wrap gap-2 mt-2">
                 {events.map((event) => (
@@ -835,6 +939,8 @@ function WebhooksTab() {
                   name: editForm.name,
                   url: editForm.url,
                   events: editForm.events,
+                  signature_version: editForm.signature_version,
+                  description: editForm.description || null as unknown as string,
                   ...(editForm.changeSecret && editForm.secret ? { secret: editForm.secret } : {}),
                 },
               })}

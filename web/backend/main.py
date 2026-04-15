@@ -524,6 +524,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.debug("Rate limiter Redis upgrade skipped: %s", e)
 
+    # Start webhook retry worker + API key usage buffer
+    try:
+        from web.backend.core.webhook_security import start_retry_worker
+        start_retry_worker()
+    except Exception as e:
+        logger.warning("Webhook retry worker start failed: %s", e)
+    try:
+        from web.backend.core.api_key_usage import start as start_usage_buffer
+        start_usage_buffer()
+    except Exception as e:
+        logger.warning("API key usage buffer start failed: %s", e)
+
     # Ensure MaxMind GeoLite2 databases are downloaded
     # Supports: license key (official), GitHub mirror (ltsdev/maxmind), or auto
     try:
@@ -552,6 +564,18 @@ async def lifespan(app: FastAPI):
         except (asyncio.CancelledError, Exception):
             pass
     _bg_tasks.clear()
+
+    # Stop webhook retry worker + API key usage buffer
+    try:
+        from web.backend.core.webhook_security import stop_retry_worker
+        await stop_retry_worker()
+    except Exception:
+        pass
+    try:
+        from web.backend.core.api_key_usage import stop as stop_usage_buffer
+        await stop_usage_buffer()
+    except Exception:
+        pass
 
     try:
         from web.backend.core.cache import cache

@@ -43,6 +43,7 @@ class ApiKeyCreate(BaseModel):
     name: str
     scopes: List[str] = []
     expires_at: Optional[str] = None
+    description: Optional[str] = None
 
 
 class ApiKeyResponse(BaseModel):
@@ -54,6 +55,7 @@ class ApiKeyResponse(BaseModel):
     expires_at: Optional[str] = None
     last_used_at: Optional[str] = None
     created_by_username: Optional[str] = None
+    description: Optional[str] = None
     created_at: str
 
 
@@ -65,6 +67,7 @@ class ApiKeyUpdate(BaseModel):
     name: Optional[str] = None
     scopes: Optional[List[str]] = None
     is_active: Optional[bool] = None
+    description: Optional[str] = None
 
 
 # ── Endpoints ────────────────────────────────────────────────────
@@ -81,7 +84,7 @@ async def list_api_keys(
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
             "SELECT id, name, key_prefix, scopes, is_active, expires_at, "
-            "last_used_at, created_by_username, created_at "
+            "last_used_at, created_by_username, description, created_at "
             "FROM api_keys ORDER BY created_at DESC"
         )
 
@@ -178,7 +181,7 @@ async def update_api_key(
         row = await conn.fetchrow(
             f"UPDATE api_keys SET {', '.join(set_clauses)}, updated_at = NOW() "
             f"WHERE id = ${idx} RETURNING id, name, key_prefix, scopes, is_active, "
-            f"expires_at, last_used_at, created_by_username, created_at",
+            f"expires_at, last_used_at, created_by_username, description, created_at",
             *params,
         )
 
@@ -209,3 +212,45 @@ async def delete_api_key(
         )
     if result == "DELETE 0":
         raise api_error(404, E.ADMIN_NOT_FOUND, "API key not found")
+
+
+@router.post("/{key_id}/rotate", response_model=ApiKeyCreated)
+async def rotate_api_key(
+    key_id: int,
+    admin: AdminUser = Depends(require_permission("api_keys", "edit")),
+):
+    """Generate a new secret for an existing key while preserving id/name/scopes.
+
+    The old secret is invalidated immediately. Use this when the current key
+    has been compromised or leaked.
+    """
+    import hashlib
+    import secrets
+    from web.backend.core.api_key_auth import API_KEY_PREFIX
+
+    from shared.database import db_service
+    if not db_service.is_connected:
+        raise api_error(503, E.DB_UNAVAILABLE)
+
+    random_part = secrets.token_urlsafe(32)
+    raw_key = f"{API_KEY_PREFIX}{random_part}"
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+    key_prefix = raw_key[:12]
+
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            "UPDATE api_keys SET key_hash = $1, key_prefix = $2, "
+            "last_used_at = NULL, updated_at = NOW() "
+            "WHERE id = $3 "
+            "RETURNING id, name, key_prefix, scopes, is_active, expires_at, "
+            "last_used_at, created_by_username, description, created_at",
+            key_hash, key_prefix, key_id,
+        )
+    if not row:
+        raise api_error(404, E.ADMIN_NOT_FOUND, "API key not found")
+    d = dict(row)
+    d["scopes"] = list(d["scopes"]) if d["scopes"] else []
+    for dt in ("expires_at", "last_used_at", "created_at"):
+        if d.get(dt):
+            d[dt] = d[dt].isoformat()
+    return ApiKeyCreated(raw_key=raw_key, **d)

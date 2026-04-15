@@ -58,11 +58,12 @@ async def validate_api_key(raw_key: str) -> Optional[dict]:
             if row["expires_at"] and row["expires_at"] < datetime.now(timezone.utc):
                 return None
 
-            # Update last_used_at
-            await conn.execute(
-                "UPDATE api_keys SET last_used_at = NOW() WHERE id = $1",
-                row["id"],
-            )
+            # Buffered last_used_at update — avoids row-lock on every request.
+            try:
+                from web.backend.core.api_key_usage import mark_used
+                await mark_used(row["id"])
+            except Exception:
+                pass
 
             return {
                 "id": row["id"],
