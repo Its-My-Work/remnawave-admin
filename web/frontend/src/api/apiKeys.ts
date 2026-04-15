@@ -28,6 +28,24 @@ export interface WebhookSubscription {
   created_at: string
 }
 
+export interface WebhookDelivery {
+  id: number
+  webhook_id: number
+  event: string
+  status_code: number
+  response_body: string | null
+  error: string | null
+  duration_ms: number | null
+  sent_at: string
+}
+
+export interface WebhookTestResult {
+  status_code: number | null
+  response_body: string | null
+  error: string | null
+  duration_ms: number | null
+}
+
 export const apiKeysApi = {
   list: async (): Promise<ApiKey[]> => {
     const { data } = await client.get('/api-keys/')
@@ -80,5 +98,15 @@ export const webhooksApi = {
 
   delete: async (id: number): Promise<void> => {
     await client.delete(`/webhooks/${id}`)
+  },
+
+  test: async (id: number): Promise<WebhookTestResult> => {
+    const { data } = await client.post(`/webhooks/${id}/test`)
+    return data
+  },
+
+  deliveries: async (id: number, limit = 50): Promise<WebhookDelivery[]> => {
+    const { data } = await client.get(`/webhooks/${id}/deliveries`, { params: { limit } })
+    return Array.isArray(data) ? data : []
   },
 }

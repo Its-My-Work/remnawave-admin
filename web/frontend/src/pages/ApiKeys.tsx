@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -11,8 +11,20 @@ import {
   Webhook,
   AlertTriangle,
   ExternalLink,
+  Pencil,
+  Send,
+  History,
+  Loader2,
 } from 'lucide-react'
-import { apiKeysApi, webhooksApi, type ApiKeyCreated } from '../api/apiKeys'
+import {
+  apiKeysApi,
+  webhooksApi,
+  type ApiKey,
+  type ApiKeyCreated,
+  type WebhookSubscription,
+  type WebhookDelivery,
+  type WebhookTestResult,
+} from '../api/apiKeys'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,10 +33,41 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { PermissionGate } from '@/components/PermissionGate'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useFormatters } from '@/lib/useFormatters'
+import { useTabParam } from '@/lib/useTabParam'
+import { toastMutationError } from '@/lib/mutationToast'
+
+const COPY_RESET_MS = 3500
+
+// ── Shared helpers ──────────────────────────────────────────────
+
+function isValidUrl(value: string): boolean {
+  if (!value) return false
+  try {
+    const u = new URL(value)
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function ttlToIsoString(ttl: string): string | undefined {
+  if (!ttl || ttl === 'never') return undefined
+  const now = Date.now()
+  const ms: Record<string, number> = {
+    '1d': 86400_000,
+    '7d': 7 * 86400_000,
+    '30d': 30 * 86400_000,
+    '90d': 90 * 86400_000,
+    '365d': 365 * 86400_000,
+  }
+  return ms[ttl] ? new Date(now + ms[ttl]).toISOString() : undefined
+}
 
 // ── API Keys Tab ────────────────────────────────────────────────
 
@@ -36,9 +79,16 @@ function ApiKeysTab() {
   const [showCreate, setShowCreate] = useState(false)
   const [newKeyName, setNewKeyName] = useState('')
   const [newKeyScopes, setNewKeyScopes] = useState<string[]>([])
+  const [newKeyTtl, setNewKeyTtl] = useState<string>('never')
   const [createdKey, setCreatedKey] = useState<ApiKeyCreated | null>(null)
+  const [keySaved, setKeySaved] = useState(false)
   const [copied, setCopied] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
+  const [editKey, setEditKey] = useState<ApiKey | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editScopes, setEditScopes] = useState<string[]>([])
+
+  const retryLabel = t('common.retry', { defaultValue: 'Повторить' })
 
   const { data: keys = [], isLoading } = useQuery({
     queryKey: ['api-keys'],
@@ -57,19 +107,32 @@ function ApiKeysTab() {
       setShowCreate(false)
       setNewKeyName('')
       setNewKeyScopes([])
+      setNewKeyTtl('never')
+      setKeySaved(false)
       queryClient.invalidateQueries({ queryKey: ['api-keys'] })
     },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.detail || t('apiKeys.createFailed'))
-    },
+    onError: (err, vars) =>
+      toastMutationError(err, t('apiKeys.createFailed'), () => createKey.mutate(vars), retryLabel),
   })
 
   const toggleKey = useMutation({
     mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) =>
       apiKeysApi.update(id, { is_active }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['api-keys'] }),
+    onError: (err, vars) =>
+      toastMutationError(err, t('apiKeys.updateFailed', { defaultValue: 'Не удалось обновить ключ' }), () => toggleKey.mutate(vars), retryLabel),
+  })
+
+  const updateKey = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: { name?: string; scopes?: string[] } }) =>
+      apiKeysApi.update(id, payload),
     onSuccess: () => {
+      toast.success(t('apiKeys.updated', { defaultValue: 'Ключ обновлён' }))
+      setEditKey(null)
       queryClient.invalidateQueries({ queryKey: ['api-keys'] })
     },
+    onError: (err, vars) =>
+      toastMutationError(err, t('apiKeys.updateFailed', { defaultValue: 'Не удалось обновить ключ' }), () => updateKey.mutate(vars), retryLabel),
   })
 
   const deleteKey = useMutation({
@@ -79,18 +142,30 @@ function ApiKeysTab() {
       setConfirmDelete(null)
       queryClient.invalidateQueries({ queryKey: ['api-keys'] })
     },
+    onError: (err, id) =>
+      toastMutationError(err, t('apiKeys.deleteFailed', { defaultValue: 'Не удалось удалить ключ' }), () => deleteKey.mutate(id), retryLabel),
   })
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setTimeout(() => setCopied(false), COPY_RESET_MS)
   }
 
-  const toggleScope = (scope: string) => {
-    setNewKeyScopes((prev) =>
-      prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope],
-    )
+  const toggleScope = (scope: string, scopeState: string[], setter: (s: string[]) => void) => {
+    setter(scopeState.includes(scope) ? scopeState.filter((s) => s !== scope) : [...scopeState, scope])
+  }
+
+  const openEdit = (key: ApiKey) => {
+    setEditKey(key)
+    setEditName(key.name)
+    setEditScopes(key.scopes)
+  }
+
+  const closeCreatedDialog = () => {
+    if (!keySaved) return
+    setCreatedKey(null)
+    setKeySaved(false)
   }
 
   return (
@@ -133,49 +208,69 @@ function ApiKeysTab() {
             </div>
           ) : (
             <div className="space-y-2">
-              {keys.map((key) => (
-                <div
-                  key={key.id}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)] transition-colors"
-                >
-                  <Key className={`w-5 h-5 flex-shrink-0 ${key.is_active ? 'text-emerald-400' : 'text-dark-400'}`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-white truncate">{key.name}</p>
-                      <code className="text-xs text-dark-300 bg-[var(--glass-bg-hover)] px-1.5 py-0.5 rounded">
-                        {key.key_prefix}...
-                      </code>
-                      {!key.is_active && (
-                        <Badge variant="outline" className="text-xs text-red-400 border-red-500/20">
-                          {t('apiKeys.disabled')}
-                        </Badge>
-                      )}
+              {keys.map((key) => {
+                const expired = key.expires_at && new Date(key.expires_at) < new Date()
+                return (
+                  <div
+                    key={key.id}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)] transition-colors"
+                  >
+                    <Key className={`w-5 h-5 flex-shrink-0 ${key.is_active && !expired ? 'text-emerald-400' : 'text-dark-400'}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-white truncate">{key.name}</p>
+                        <code className="text-xs text-dark-300 bg-[var(--glass-bg-hover)] px-1.5 py-0.5 rounded">
+                          {key.key_prefix}...
+                        </code>
+                        {!key.is_active && (
+                          <Badge variant="outline" className="text-xs text-red-400 border-red-500/20">
+                            {t('apiKeys.disabled')}
+                          </Badge>
+                        )}
+                        {expired && (
+                          <Badge variant="outline" className="text-xs text-amber-400 border-amber-500/20">
+                            {t('apiKeys.expired', { defaultValue: 'Истёк' })}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-dark-300">
+                        {key.scopes.join(', ') || t('apiKeys.noScopes')}
+                        {key.last_used_at && ` · ${t('apiKeys.lastUsed')}: ${formatDate(key.last_used_at)}`}
+                        {key.expires_at && ` · ${t('apiKeys.expiresAt', { defaultValue: 'Истекает' })}: ${formatDate(key.expires_at)}`}
+                      </p>
                     </div>
-                    <p className="text-xs text-dark-300">
-                      {key.scopes.join(', ') || t('apiKeys.noScopes')}
-                      {key.last_used_at && ` · ${t('apiKeys.lastUsed')}: ${formatDate(key.last_used_at)}`}
-                    </p>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <PermissionGate resource="api_keys" action="edit">
+                        <Switch
+                          aria-label={t('apiKeys.toggleActive', { defaultValue: 'Переключить активность' })}
+                          checked={key.is_active}
+                          onCheckedChange={(checked) => toggleKey.mutate({ id: key.id, is_active: checked })}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label={t('common.edit')}
+                          onClick={() => openEdit(key)}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                      </PermissionGate>
+                      <PermissionGate resource="api_keys" action="delete">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-red-400 hover:text-red-300"
+                          aria-label={t('common.delete')}
+                          onClick={() => setConfirmDelete(key.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </PermissionGate>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <PermissionGate resource="api_keys" action="edit">
-                      <Switch
-                        checked={key.is_active}
-                        onCheckedChange={(checked) => toggleKey.mutate({ id: key.id, is_active: checked })}
-                      />
-                    </PermissionGate>
-                    <PermissionGate resource="api_keys" action="delete">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-red-400 hover:text-red-300"
-                        onClick={() => setConfirmDelete(key.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </PermissionGate>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </CardContent>
@@ -194,7 +289,22 @@ function ApiKeysTab() {
                 value={newKeyName}
                 onChange={(e) => setNewKeyName(e.target.value)}
                 placeholder={t('apiKeys.keyNamePlaceholder')}
+                autoFocus
               />
+            </div>
+            <div>
+              <Label>{t('apiKeys.ttl', { defaultValue: 'Срок действия' })}</Label>
+              <Select value={newKeyTtl} onValueChange={setNewKeyTtl}>
+                <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="never">{t('apiKeys.ttlNever', { defaultValue: 'Никогда' })}</SelectItem>
+                  <SelectItem value="1d">1 {t('apiKeys.day', { defaultValue: 'день' })}</SelectItem>
+                  <SelectItem value="7d">7 {t('apiKeys.days', { defaultValue: 'дней' })}</SelectItem>
+                  <SelectItem value="30d">30 {t('apiKeys.days', { defaultValue: 'дней' })}</SelectItem>
+                  <SelectItem value="90d">90 {t('apiKeys.days', { defaultValue: 'дней' })}</SelectItem>
+                  <SelectItem value="365d">365 {t('apiKeys.days', { defaultValue: 'дней' })}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>{t('apiKeys.scopes')}</Label>
@@ -202,7 +312,9 @@ function ApiKeysTab() {
                 {scopes.map((scope) => (
                   <button
                     key={scope}
-                    onClick={() => toggleScope(scope)}
+                    type="button"
+                    aria-pressed={newKeyScopes.includes(scope)}
+                    onClick={() => toggleScope(scope, newKeyScopes, setNewKeyScopes)}
                     className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
                       newKeyScopes.includes(scope)
                         ? 'bg-primary/20 text-primary-400 border-primary/40'
@@ -221,16 +333,26 @@ function ApiKeysTab() {
             </Button>
             <Button
               disabled={!newKeyName.trim() || createKey.isPending}
-              onClick={() => createKey.mutate({ name: newKeyName, scopes: newKeyScopes })}
+              onClick={() => createKey.mutate({
+                name: newKeyName,
+                scopes: newKeyScopes,
+                expires_at: ttlToIsoString(newKeyTtl),
+              })}
             >
+              {createKey.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {t('apiKeys.create')}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Show created key */}
-      <Dialog open={!!createdKey} onOpenChange={() => setCreatedKey(null)}>
+      {/* Show created key — closing requires checkbox confirm */}
+      <Dialog
+        open={!!createdKey}
+        onOpenChange={(open) => {
+          if (!open) closeCreatedDialog()
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t('apiKeys.keyCreated')}</DialogTitle>
@@ -247,15 +369,78 @@ function ApiKeysTab() {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label={t('common.copy', { defaultValue: 'Копировать' })}
                 className="absolute top-2 right-2 h-7 w-7"
                 onClick={() => createdKey && handleCopy(createdKey.raw_key)}
               >
                 {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
               </Button>
             </div>
+            <label className="flex items-start gap-2 cursor-pointer">
+              <Checkbox
+                checked={keySaved}
+                onCheckedChange={(c) => setKeySaved(c === true)}
+                className="mt-0.5"
+              />
+              <span className="text-sm text-dark-200">
+                {t('apiKeys.confirmSaved', { defaultValue: 'Я сохранил ключ в безопасном месте' })}
+              </span>
+            </label>
           </div>
           <DialogFooter>
-            <Button onClick={() => setCreatedKey(null)}>{t('common.close')}</Button>
+            <Button onClick={closeCreatedDialog} disabled={!keySaved}>
+              {t('common.close')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit dialog */}
+      <Dialog open={!!editKey} onOpenChange={(open) => !open && setEditKey(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('apiKeys.editKey', { defaultValue: 'Редактировать ключ' })}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label>{t('apiKeys.keyName')}</Label>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+            </div>
+            <div>
+              <Label>{t('apiKeys.scopes')}</Label>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {scopes.map((scope) => (
+                  <button
+                    key={scope}
+                    type="button"
+                    aria-pressed={editScopes.includes(scope)}
+                    onClick={() => toggleScope(scope, editScopes, setEditScopes)}
+                    className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                      editScopes.includes(scope)
+                        ? 'bg-primary/20 text-primary-400 border-primary/40'
+                        : 'bg-[var(--glass-bg)] text-dark-300 border-[var(--glass-border)]'
+                    }`}
+                  >
+                    {scope}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditKey(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              disabled={!editName.trim() || updateKey.isPending}
+              onClick={() => editKey && updateKey.mutate({
+                id: editKey.id,
+                payload: { name: editName, scopes: editScopes },
+              })}
+            >
+              {updateKey.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {t('common.save')}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -286,6 +471,13 @@ function WebhooksTab() {
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({ name: '', url: '', secret: '', events: [] as string[] })
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
+  const [editWebhook, setEditWebhook] = useState<WebhookSubscription | null>(null)
+  const [editForm, setEditForm] = useState({ name: '', url: '', secret: '', events: [] as string[], changeSecret: false })
+  const [testWebhookId, setTestWebhookId] = useState<number | null>(null)
+  const [testResult, setTestResult] = useState<WebhookTestResult | null>(null)
+  const [historyWebhookId, setHistoryWebhookId] = useState<number | null>(null)
+
+  const retryLabel = t('common.retry', { defaultValue: 'Повторить' })
 
   const { data: webhooks = [], isLoading } = useQuery({
     queryKey: ['webhooks'],
@@ -297,6 +489,9 @@ function WebhooksTab() {
     queryFn: webhooksApi.getEvents,
   })
 
+  const urlValid = useMemo(() => !form.url || isValidUrl(form.url), [form.url])
+  const editUrlValid = useMemo(() => !editForm.url || isValidUrl(editForm.url), [editForm.url])
+
   const createWebhook = useMutation({
     mutationFn: webhooksApi.create,
     onSuccess: () => {
@@ -305,17 +500,28 @@ function WebhooksTab() {
       setForm({ name: '', url: '', secret: '', events: [] })
       queryClient.invalidateQueries({ queryKey: ['webhooks'] })
     },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.detail || t('apiKeys.createFailed'))
-    },
+    onError: (err, vars) =>
+      toastMutationError(err, t('apiKeys.createFailed'), () => createWebhook.mutate(vars), retryLabel),
   })
 
   const toggleWebhook = useMutation({
     mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) =>
       webhooksApi.update(id, { is_active }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['webhooks'] }),
+    onError: (err, vars) =>
+      toastMutationError(err, t('apiKeys.updateFailed', { defaultValue: 'Не удалось обновить webhook' }), () => toggleWebhook.mutate(vars), retryLabel),
+  })
+
+  const updateWebhook = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: { name?: string; url?: string; secret?: string; events?: string[] } }) =>
+      webhooksApi.update(id, payload),
     onSuccess: () => {
+      toast.success(t('apiKeys.webhookUpdated', { defaultValue: 'Webhook обновлён' }))
+      setEditWebhook(null)
       queryClient.invalidateQueries({ queryKey: ['webhooks'] })
     },
+    onError: (err, vars) =>
+      toastMutationError(err, t('apiKeys.updateFailed', { defaultValue: 'Не удалось обновить webhook' }), () => updateWebhook.mutate(vars), retryLabel),
   })
 
   const deleteWebhook = useMutation({
@@ -325,15 +531,38 @@ function WebhooksTab() {
       setConfirmDelete(null)
       queryClient.invalidateQueries({ queryKey: ['webhooks'] })
     },
+    onError: (err, id) =>
+      toastMutationError(err, t('apiKeys.deleteFailed', { defaultValue: 'Не удалось удалить webhook' }), () => deleteWebhook.mutate(id), retryLabel),
   })
 
-  const toggleEvent = (event: string) => {
-    setForm((prev) => ({
-      ...prev,
-      events: prev.events.includes(event)
-        ? prev.events.filter((e) => e !== event)
-        : [...prev.events, event],
-    }))
+  const testWebhook = useMutation({
+    mutationFn: (id: number) => webhooksApi.test(id),
+    onSuccess: (data) => {
+      setTestResult(data)
+    },
+    onError: (err, id) =>
+      toastMutationError(err, t('apiKeys.testFailed', { defaultValue: 'Тест не удался' }), () => testWebhook.mutate(id), retryLabel),
+  })
+
+  const toggleEvent = (event: string, state: string[], setter: (s: string[]) => void) => {
+    setter(state.includes(event) ? state.filter((e) => e !== event) : [...state, event])
+  }
+
+  const openEdit = (wh: WebhookSubscription) => {
+    setEditWebhook(wh)
+    setEditForm({
+      name: wh.name,
+      url: wh.url,
+      secret: '',
+      events: wh.events,
+      changeSecret: false,
+    })
+  }
+
+  const runTest = (id: number) => {
+    setTestWebhookId(id)
+    setTestResult(null)
+    testWebhook.mutate(id)
   }
 
   return (
@@ -372,7 +601,7 @@ function WebhooksTab() {
                 >
                   <Webhook className={`w-5 h-5 flex-shrink-0 ${wh.is_active ? 'text-blue-400' : 'text-dark-400'}`} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-medium text-white truncate">{wh.name}</p>
                       {wh.has_secret && (
                         <Badge variant="outline" className="text-xs text-emerald-400 border-emerald-500/20">
@@ -385,26 +614,58 @@ function WebhooksTab() {
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs text-dark-300 truncate">
-                      {wh.url}
-                    </p>
+                    <p className="text-xs text-dark-300 truncate">{wh.url}</p>
                     <p className="text-xs text-dark-400">
                       {wh.events.join(', ')}
                       {wh.last_triggered_at && ` · ${t('apiKeys.lastTriggered')}: ${formatDate(wh.last_triggered_at)}`}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-1 flex-shrink-0">
                     <PermissionGate resource="api_keys" action="edit">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        aria-label={t('apiKeys.testWebhook', { defaultValue: 'Тест webhook' })}
+                        title={t('apiKeys.testWebhook', { defaultValue: 'Тест webhook' })}
+                        onClick={() => runTest(wh.id)}
+                        disabled={testWebhook.isPending && testWebhookId === wh.id}
+                      >
+                        {testWebhook.isPending && testWebhookId === wh.id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <Send className="w-4 h-4" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        aria-label={t('apiKeys.deliveryHistory', { defaultValue: 'История вызовов' })}
+                        title={t('apiKeys.deliveryHistory', { defaultValue: 'История вызовов' })}
+                        onClick={() => setHistoryWebhookId(wh.id)}
+                      >
+                        <History className="w-4 h-4" />
+                      </Button>
                       <Switch
+                        aria-label={t('apiKeys.toggleActive', { defaultValue: 'Переключить активность' })}
                         checked={wh.is_active}
                         onCheckedChange={(checked) => toggleWebhook.mutate({ id: wh.id, is_active: checked })}
                       />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        aria-label={t('common.edit')}
+                        onClick={() => openEdit(wh)}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
                     </PermissionGate>
                     <PermissionGate resource="api_keys" action="delete">
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-red-400 hover:text-red-300"
+                        aria-label={t('common.delete')}
                         onClick={() => setConfirmDelete(wh.id)}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -418,7 +679,7 @@ function WebhooksTab() {
         </CardContent>
       </Card>
 
-      {/* Create webhook dialog */}
+      {/* Create dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent>
           <DialogHeader>
@@ -431,15 +692,23 @@ function WebhooksTab() {
                 value={form.name}
                 onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                 placeholder={t('apiKeys.webhookNamePlaceholder')}
+                autoFocus
               />
             </div>
             <div>
               <Label>URL</Label>
               <Input
+                type="url"
                 value={form.url}
                 onChange={(e) => setForm((p) => ({ ...p, url: e.target.value }))}
                 placeholder="https://example.com/webhook"
+                aria-invalid={!urlValid}
               />
+              {!urlValid && (
+                <p className="text-xs text-red-400 mt-1">
+                  {t('apiKeys.urlInvalid', { defaultValue: 'URL должен начинаться с http:// или https://' })}
+                </p>
+              )}
             </div>
             <div>
               <Label>{t('apiKeys.webhookSecret')}</Label>
@@ -448,6 +717,9 @@ function WebhooksTab() {
                 onChange={(e) => setForm((p) => ({ ...p, secret: e.target.value }))}
                 placeholder={t('apiKeys.webhookSecretPlaceholder')}
               />
+              <p className="text-xs text-dark-400 mt-1">
+                {t('apiKeys.secretHint', { defaultValue: 'Подпись отправляется в заголовке X-Webhook-Signature (HMAC-SHA256)' })}
+              </p>
             </div>
             <div>
               <Label>{t('apiKeys.events')}</Label>
@@ -455,11 +727,13 @@ function WebhooksTab() {
                 {events.map((event) => (
                   <button
                     key={event}
-                    onClick={() => toggleEvent(event)}
+                    type="button"
+                    aria-pressed={form.events.includes(event)}
+                    onClick={() => toggleEvent(event, form.events, (e) => setForm((p) => ({ ...p, events: e })))}
                     className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
                       form.events.includes(event)
                         ? 'bg-primary/20 text-primary-400 border-primary/40'
-                        : 'bg-[var(--glass-bg)] text-dark-300 border-[var(--glass-border)] hover:border-[var(--glass-border)]'
+                        : 'bg-[var(--glass-bg)] text-dark-300 border-[var(--glass-border)]'
                     }`}
                   >
                     {event}
@@ -473,14 +747,145 @@ function WebhooksTab() {
               {t('common.cancel')}
             </Button>
             <Button
-              disabled={!form.name.trim() || !form.url.trim() || createWebhook.isPending}
+              disabled={!form.name.trim() || !isValidUrl(form.url) || createWebhook.isPending}
               onClick={() => createWebhook.mutate(form)}
             >
+              {createWebhook.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {t('apiKeys.create')}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit dialog */}
+      <Dialog open={!!editWebhook} onOpenChange={(open) => !open && setEditWebhook(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('apiKeys.editWebhook', { defaultValue: 'Редактировать webhook' })}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label>{t('apiKeys.webhookName')}</Label>
+              <Input value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} />
+            </div>
+            <div>
+              <Label>URL</Label>
+              <Input
+                type="url"
+                value={editForm.url}
+                onChange={(e) => setEditForm((p) => ({ ...p, url: e.target.value }))}
+                aria-invalid={!editUrlValid}
+              />
+              {!editUrlValid && (
+                <p className="text-xs text-red-400 mt-1">
+                  {t('apiKeys.urlInvalid', { defaultValue: 'URL должен начинаться с http:// или https://' })}
+                </p>
+              )}
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <Label>{t('apiKeys.webhookSecret')}</Label>
+                <label className="flex items-center gap-2 text-xs text-dark-300 cursor-pointer">
+                  <Checkbox
+                    checked={editForm.changeSecret}
+                    onCheckedChange={(c) => setEditForm((p) => ({ ...p, changeSecret: c === true, secret: '' }))}
+                  />
+                  {t('apiKeys.changeSecret', { defaultValue: 'Сменить секрет' })}
+                </label>
+              </div>
+              {editForm.changeSecret && (
+                <Input
+                  className="mt-2"
+                  value={editForm.secret}
+                  onChange={(e) => setEditForm((p) => ({ ...p, secret: e.target.value }))}
+                  placeholder={t('apiKeys.webhookSecretPlaceholder')}
+                />
+              )}
+            </div>
+            <div>
+              <Label>{t('apiKeys.events')}</Label>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {events.map((event) => (
+                  <button
+                    key={event}
+                    type="button"
+                    aria-pressed={editForm.events.includes(event)}
+                    onClick={() => toggleEvent(event, editForm.events, (e) => setEditForm((p) => ({ ...p, events: e })))}
+                    className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                      editForm.events.includes(event)
+                        ? 'bg-primary/20 text-primary-400 border-primary/40'
+                        : 'bg-[var(--glass-bg)] text-dark-300 border-[var(--glass-border)]'
+                    }`}
+                  >
+                    {event}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditWebhook(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              disabled={!editForm.name.trim() || !isValidUrl(editForm.url) || updateWebhook.isPending}
+              onClick={() => editWebhook && updateWebhook.mutate({
+                id: editWebhook.id,
+                payload: {
+                  name: editForm.name,
+                  url: editForm.url,
+                  events: editForm.events,
+                  ...(editForm.changeSecret && editForm.secret ? { secret: editForm.secret } : {}),
+                },
+              })}
+            >
+              {updateWebhook.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {t('common.save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Test result dialog */}
+      <Dialog open={!!testResult} onOpenChange={(open) => !open && setTestResult(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {t('apiKeys.testResult', { defaultValue: 'Результат теста' })}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-dark-300">HTTP:</span>
+              <Badge variant={testResult?.status_code && testResult.status_code >= 200 && testResult.status_code < 300 ? 'success' : 'destructive'}>
+                {testResult?.status_code ?? t('apiKeys.testFailed', { defaultValue: 'Ошибка' })}
+              </Badge>
+              {testResult?.duration_ms != null && (
+                <span className="text-xs text-dark-400">{testResult.duration_ms} ms</span>
+              )}
+            </div>
+            {testResult?.error && (
+              <div className="text-sm text-red-400">{testResult.error}</div>
+            )}
+            {testResult?.response_body && (
+              <pre className="text-xs bg-[var(--glass-bg)] p-3 rounded-lg max-h-[300px] overflow-auto whitespace-pre-wrap break-all">
+                {testResult.response_body}
+              </pre>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setTestResult(null)}>{t('common.close')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delivery history dialog */}
+      {historyWebhookId !== null && (
+        <DeliveryHistoryDialog
+          webhookId={historyWebhookId}
+          onClose={() => setHistoryWebhookId(null)}
+        />
+      )}
 
       <ConfirmDialog
         open={!!confirmDelete}
@@ -498,10 +903,72 @@ function WebhooksTab() {
 }
 
 
+function DeliveryHistoryDialog({ webhookId, onClose }: { webhookId: number; onClose: () => void }) {
+  const { t } = useTranslation()
+  const { formatDate } = useFormatters()
+  const { data: deliveries = [], isLoading } = useQuery({
+    queryKey: ['webhook-deliveries', webhookId],
+    queryFn: () => webhooksApi.deliveries(webhookId),
+  })
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{t('apiKeys.deliveryHistory', { defaultValue: 'История вызовов' })}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-2 py-2 max-h-[500px] overflow-auto">
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
+            </div>
+          ) : deliveries.length === 0 ? (
+            <p className="text-center text-dark-400 py-8">
+              {t('apiKeys.noDeliveries', { defaultValue: 'Пока вызовов не было' })}
+            </p>
+          ) : (
+            deliveries.map((d: WebhookDelivery) => {
+              const success = d.status_code >= 200 && d.status_code < 300
+              return (
+                <div key={d.id} className="px-3 py-2 rounded-lg bg-[var(--glass-bg)]">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant={success ? 'success' : 'destructive'}>{d.status_code || 'ERR'}</Badge>
+                    <code className="text-xs text-dark-200">{d.event}</code>
+                    <span className="text-xs text-dark-400 ml-auto">{formatDate(d.sent_at)}</span>
+                    {d.duration_ms != null && (
+                      <span className="text-xs text-dark-400">{d.duration_ms} ms</span>
+                    )}
+                  </div>
+                  {d.error && <p className="text-xs text-red-400 mt-1">{d.error}</p>}
+                  {d.response_body && (
+                    <details className="mt-1">
+                      <summary className="text-xs text-dark-400 cursor-pointer hover:text-dark-200">
+                        {t('apiKeys.showResponse', { defaultValue: 'Показать ответ' })}
+                      </summary>
+                      <pre className="text-xs bg-[var(--glass-bg-hover)] p-2 mt-1 rounded max-h-[200px] overflow-auto whitespace-pre-wrap break-all">
+                        {d.response_body}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+        <DialogFooter>
+          <Button onClick={onClose}>{t('common.close')}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+
 // ── Main Page ───────────────────────────────────────────────────
 
 export default function ApiKeys() {
   const { t } = useTranslation()
+  const [tab, setTab] = useTabParam('keys', ['keys', 'webhooks'])
 
   return (
     <PermissionGate resource="api_keys" action="view" fallback={null}>
@@ -511,7 +978,7 @@ export default function ApiKeys() {
           <p className="text-sm text-dark-300 mt-1">{t('apiKeys.subtitle')}</p>
         </div>
 
-        <Tabs defaultValue="keys">
+        <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
             <TabsTrigger value="keys">{t('apiKeys.tabs.keys')}</TabsTrigger>
             <TabsTrigger value="webhooks">{t('apiKeys.tabs.webhooks')}</TabsTrigger>

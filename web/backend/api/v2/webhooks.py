@@ -3,10 +3,11 @@ import hashlib
 import hmac
 import json
 import logging
+import time
 from typing import List, Optional
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from web.backend.api.deps import AdminUser, require_permission
@@ -194,12 +195,144 @@ async def delete_webhook(
         raise api_error(404, E.ADMIN_NOT_FOUND, "Webhook not found")
 
 
+# ── Test & Delivery History ──────────────────────────────────────
+
+class WebhookTestResult(BaseModel):
+    status_code: Optional[int] = None
+    response_body: Optional[str] = None
+    error: Optional[str] = None
+    duration_ms: Optional[int] = None
+
+
+class WebhookDeliveryResponse(BaseModel):
+    id: int
+    webhook_id: int
+    event: str
+    status_code: int
+    response_body: Optional[str] = None
+    error: Optional[str] = None
+    duration_ms: Optional[int] = None
+    sent_at: str
+
+
+@router.post("/{webhook_id}/test", response_model=WebhookTestResult)
+async def test_webhook(
+    webhook_id: int,
+    admin: AdminUser = Depends(require_permission("api_keys", "edit")),
+):
+    """Send a test POST to the webhook URL and return the raw result.
+
+    Does not log to webhook_deliveries — tests are ephemeral.
+    """
+    from shared.database import db_service
+    if not db_service.is_connected:
+        raise api_error(503, E.DB_UNAVAILABLE)
+
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, url, secret FROM webhook_subscriptions WHERE id = $1",
+            webhook_id,
+        )
+    if not row:
+        raise api_error(404, E.ADMIN_NOT_FOUND, "Webhook not found")
+
+    payload = {
+        "event": "webhook.test",
+        "data": {
+            "message": "This is a test payload from Remnawave Admin.",
+            "webhook_id": webhook_id,
+        },
+    }
+    body = json.dumps(payload, default=str)
+    headers = {"Content-Type": "application/json", "X-Webhook-Event": "webhook.test"}
+    if row["secret"]:
+        sig = hmac.new(row["secret"].encode(), body.encode(), hashlib.sha256).hexdigest()
+        headers["X-Webhook-Signature"] = f"sha256={sig}"
+
+    start = time.perf_counter()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as hc:
+            resp = await hc.post(row["url"], content=body, headers=headers)
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+        return WebhookTestResult(
+            status_code=resp.status_code,
+            response_body=resp.text[:5000] if resp.text else None,
+            duration_ms=elapsed_ms,
+        )
+    except Exception as e:
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+        return WebhookTestResult(error=str(e)[:500], duration_ms=elapsed_ms)
+
+
+@router.get("/{webhook_id}/deliveries", response_model=List[WebhookDeliveryResponse])
+async def list_deliveries(
+    webhook_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    admin: AdminUser = Depends(require_permission("api_keys", "view")),
+):
+    """Return recent delivery attempts for a webhook, newest first."""
+    from shared.database import db_service
+    if not db_service.is_connected:
+        return []
+
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT id, webhook_id, event, status_code, response_body, error, "
+            "duration_ms, sent_at FROM webhook_deliveries "
+            "WHERE webhook_id = $1 ORDER BY sent_at DESC LIMIT $2",
+            webhook_id, limit,
+        )
+
+    result = []
+    for r in rows:
+        d = dict(r)
+        if d.get("sent_at"):
+            d["sent_at"] = d["sent_at"].isoformat()
+        result.append(WebhookDeliveryResponse(**d))
+    return result
+
+
 # ── Dispatch ─────────────────────────────────────────────────────
+
+async def _log_delivery(
+    webhook_id: int,
+    event: str,
+    status_code: int,
+    response_body: Optional[str],
+    error: Optional[str],
+    duration_ms: int,
+) -> None:
+    """Persist a delivery attempt. Best-effort — never raises."""
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return
+        async with db_service.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO webhook_deliveries "
+                "(webhook_id, event, status_code, response_body, error, duration_ms) "
+                "VALUES ($1, $2, $3, $4, $5, $6)",
+                webhook_id, event, status_code,
+                (response_body[:5000] if response_body else None),
+                (error[:500] if error else None),
+                duration_ms,
+            )
+            # Trim to last 200 per webhook to prevent unbounded growth
+            await conn.execute(
+                "DELETE FROM webhook_deliveries WHERE webhook_id = $1 "
+                "AND id NOT IN (SELECT id FROM webhook_deliveries "
+                "WHERE webhook_id = $1 ORDER BY sent_at DESC LIMIT 200)",
+                webhook_id,
+            )
+    except Exception as e:
+        logger.warning("Failed to log webhook delivery %d: %s", webhook_id, e)
+
 
 async def dispatch_webhook_event(event: str, payload: dict) -> None:
     """Send webhook event to all active subscriptions matching this event.
 
-    Fire-and-forget: errors are logged, not raised.
+    Fire-and-forget: errors are logged, not raised. Each attempt is also
+    persisted to webhook_deliveries for later inspection in the UI.
     """
     try:
         from shared.database import db_service
@@ -220,8 +353,9 @@ async def dispatch_webhook_event(event: str, payload: dict) -> None:
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             for row in rows:
+                start = time.perf_counter()
                 try:
-                    headers = {"Content-Type": "application/json"}
+                    headers = {"Content-Type": "application/json", "X-Webhook-Event": event}
                     if row["secret"]:
                         sig = hmac.new(
                             row["secret"].encode(),
@@ -231,6 +365,7 @@ async def dispatch_webhook_event(event: str, payload: dict) -> None:
                         headers["X-Webhook-Signature"] = f"sha256={sig}"
 
                     resp = await client.post(row["url"], content=body, headers=headers)
+                    elapsed_ms = int((time.perf_counter() - start) * 1000)
 
                     async with db_service.acquire() as conn:
                         if resp.is_success:
@@ -249,7 +384,12 @@ async def dispatch_webhook_event(event: str, payload: dict) -> None:
                                 "Webhook %d returned %d for event %s",
                                 row["id"], resp.status_code, event,
                             )
+                    await _log_delivery(
+                        row["id"], event, resp.status_code,
+                        resp.text if resp.text else None, None, elapsed_ms,
+                    )
                 except Exception as e:
+                    elapsed_ms = int((time.perf_counter() - start) * 1000)
                     logger.warning("Webhook %d dispatch failed: %s", row["id"], e)
                     try:
                         async with db_service.acquire() as conn:
@@ -260,5 +400,6 @@ async def dispatch_webhook_event(event: str, payload: dict) -> None:
                             )
                     except Exception:
                         pass
+                    await _log_delivery(row["id"], event, 0, None, str(e), elapsed_ms)
     except Exception as e:
         logger.error("Webhook dispatch error: %s", e)
