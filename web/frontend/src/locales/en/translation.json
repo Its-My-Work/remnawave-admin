@@ -1,4 +1,11 @@
 {
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "commandPalette": "Command palette",
+    "quickSearch": "Quick search",
+    "showShortcuts": "Show shortcuts",
+    "closeModal": "Close dialog"
+  },
   "common": {
     "save": "Save",
     "saving": "Saving...",

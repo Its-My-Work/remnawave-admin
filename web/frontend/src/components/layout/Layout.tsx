@@ -3,6 +3,7 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import PageBreadcrumbs from './PageBreadcrumbs'
 import { CommandPalette } from '../CommandPalette'
+import { ShortcutsDialog } from '../ShortcutsDialog'
 import { useRealtimeUpdates } from '../../store/useWebSocket'
 
 interface LayoutProps {
@@ -12,16 +13,41 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
   // Connect WebSocket for real-time updates (nodes, users, violations)
   useRealtimeUpdates()
 
-  // Global keyboard shortcut: Cmd/Ctrl + K → open command palette
+  // Global keyboard shortcuts
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      // Cmd/Ctrl+K — always works, even from inputs
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
         setCommandOpen((prev) => !prev)
+        return
+      }
+
+      // Skip "/" and "?" if user is typing in an input/textarea/contenteditable
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName?.toLowerCase()
+      const isEditable =
+        tag === 'input' || tag === 'textarea' || tag === 'select' ||
+        target?.isContentEditable === true
+
+      if (isEditable) return
+      // Ignore when any modifier is pressed (don't hijack browser shortcuts)
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+
+      if (e.key === '/') {
+        e.preventDefault()
+        setCommandOpen(true)
+        return
+      }
+      if (e.key === '?') {
+        e.preventDefault()
+        setShortcutsOpen(true)
+        return
       }
     },
     [],
@@ -71,8 +97,11 @@ export default function Layout({ children }: LayoutProps) {
         </main>
       </div>
 
-      {/* Command Palette (Cmd+K) */}
+      {/* Command Palette (Cmd+K or /) */}
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+
+      {/* Shortcuts cheatsheet (?) */}
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </div>
   )
 }

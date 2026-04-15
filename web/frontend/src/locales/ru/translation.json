@@ -1,4 +1,11 @@
 {
+  "shortcuts": {
+    "title": "Горячие клавиши",
+    "commandPalette": "Командная палитра",
+    "quickSearch": "Быстрый поиск",
+    "showShortcuts": "Показать шорткаты",
+    "closeModal": "Закрыть модалку"
+  },
   "common": {
     "save": "Сохранить",
     "saving": "Сохранение...",
