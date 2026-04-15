@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, memo, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUrlParam } from '@/lib/useUrlParam'
+import { useDeferredAction } from '@/lib/useDeferredAction'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
@@ -766,6 +767,7 @@ export default function Users() {
   const canCreate = useHasPermission('users', 'create')
   const canBulk = useHasPermission('users', 'bulk_operations')
 
+  const { schedule: scheduleAction } = useDeferredAction()
   const [selectedUuids, setSelectedUuids] = useState<Set<string>>(new Set())
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createError, setCreateError] = useState('')
@@ -1395,7 +1397,15 @@ export default function Users() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => bulkDisable.mutate([...selectedUuids])}
+              onClick={() => {
+                const uuids = [...selectedUuids]
+                clearSelection()
+                scheduleAction('bulk-disable', {
+                  message: t('users.deferred.bulkDisable', { count: uuids.length, defaultValue: `Блокировка ${uuids.length} юзеров через 5 сек` }),
+                  undoLabel: t('common.undo', { defaultValue: 'Отменить' }),
+                  onCommit: () => bulkDisable.mutate(uuids),
+                })
+              }}
               disabled={bulkEnable.isPending || bulkDisable.isPending || bulkDelete.isPending}
               className="text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/10 gap-1.5"
             >
@@ -1659,8 +1669,13 @@ export default function Users() {
         variant="destructive"
         onConfirm={() => {
           if (disableConfirmUuid) {
-            disableUser.mutate(disableConfirmUuid)
+            const uuid = disableConfirmUuid
             setDisableConfirmUuid(null)
+            scheduleAction(`disable-${uuid}`, {
+              message: t('users.deferred.disable', { defaultValue: 'Юзер заблокируется через 5 сек' }),
+              undoLabel: t('common.undo', { defaultValue: 'Отменить' }),
+              onCommit: () => disableUser.mutate(uuid),
+            })
           }
         }}
       />
