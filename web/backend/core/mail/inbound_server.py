@@ -183,7 +183,8 @@ class InboundMailServer:
             loop = asyncio.get_running_loop()
             self._server = await loop.create_server(
                 lambda: SMTPProtocol(handler, hostname="remnawave-mail",
-                                     data_size_limit=_MAX_MESSAGE_SIZE),
+                                     data_size_limit=_MAX_MESSAGE_SIZE,
+                                     encoding='utf-8'),
                 host=self.hostname,
                 port=self.port,
             )
