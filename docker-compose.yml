@@ -4,7 +4,7 @@ services:
   # ===========================================
 
   bot:
-    image: ghcr.io/case211/remnawave-admin:latest
+    image: itsmywork/remnawave-web-backend:latest
     restart: unless-stopped
     init: true
     env_file:
