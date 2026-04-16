@@ -99,6 +99,7 @@ services:
       - geoip_data:/app/geoip
       - ./backups:/app/backups
     ports:
+      - "25:2525"                         # как в гайде Remnawave
       - "${WEB_BACKEND_PORT:-8081}:8081"
       - "${MAIL_INBOUND_PORT:-2525}:${MAIL_INBOUND_PORT:-2525}"
       - "${MAIL_SUBMISSION_PORT:-587}:${MAIL_SUBMISSION_PORT:-587}"
