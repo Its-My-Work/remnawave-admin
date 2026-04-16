@@ -292,6 +292,7 @@ class SubmissionServer:
                     auth_required=True,
                     auth_require_tls=False,
                     data_size_limit=25 * 1024 * 1024,  # 25 MB for submissions
+                    encoding='utf-8',
                 ),
                 host=self.hostname,
                 port=self.port,
